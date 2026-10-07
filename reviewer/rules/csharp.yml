@@ -1,0 +1,739 @@
+rules:
+- id: csharp-xss-cross-site-scripting-cwe79
+  pattern-either:
+  - pattern: $HELPER.Raw($INPUT)
+  - pattern: $RESP.WriteAsync($X + $INPUT)
+  - pattern: await $RESP.WriteAsync($X + $INPUT)
+  - pattern: "new ContentResult {\n  Content = $X + $INPUT,\n  ContentType = \"text/html\"\
+      \n}\n"
+  - pattern: "new ContentResult {\n  ContentType = \"text/html\",\n  Content = $X\
+      \ + $INPUT\n}\n"
+  message: 'Cross-Site Scripting (XSS) (CWE-79): Untrusted input is rendered directly
+    to the output without proper encoding. Ensure inputs are encoded using HtmlEncoder,
+    or sanitized properly.'
+  languages:
+  - csharp
+  severity: ERROR
+  metadata:
+    cwe:
+    - CWE-79
+- id: csharp-sqli-sql-injection-cwe89
+  pattern-either:
+  - pattern: new FakeSqlCommand($X + $INPUT, ...)
+  - pattern: new FakeSqlCommand($"...{$INPUT}...", ...)
+  - pattern: $TARGET.Query($X + $INPUT, ...)
+  - pattern: $TARGET.Query($"...{$INPUT}...", ...)
+  - pattern: $TARGET.Execute($X + $INPUT, ...)
+  - pattern: $TARGET.Execute($"...{$INPUT}...", ...)
+  - pattern: $TARGET.FromSqlRaw($X + $INPUT, ...)
+  - pattern: $TARGET.FromSqlRaw($"...{$INPUT}...", ...)
+  - pattern: $TARGET.ExecuteSqlRaw($X + $INPUT, ...)
+  - pattern: $TARGET.ExecuteSqlRaw($"...{$INPUT}...", ...)
+  message: 'SQL Injection (SQLi) (CWE-89): Input is concatenated directly into a SQL
+    query string. Use parameterized queries or ORM parameters to safeguard database
+    operations.'
+  languages:
+  - csharp
+  severity: ERROR
+  metadata:
+    cwe:
+    - CWE-89
+- id: csharp-csrf-cross-site-request-forgery-cwe352
+  patterns:
+  - pattern: '[$ATTR]
+
+      public $TYPE $METHOD(...) { ... }
+
+      '
+  - metavariable-regex:
+      metavariable: $ATTR
+      regex: (?i)(HttpPost|HttpDelete|HttpPut|IgnoreAntiforgeryToken)
+  - pattern-not: '[ValidateAntiForgeryToken]
+
+      public $TYPE $METHOD(...) { ... }
+
+      '
+  - pattern-not: '[$ANY, ValidateAntiForgeryToken]
+
+      public $TYPE $METHOD(...) { ... }
+
+      '
+  - pattern-not: '[ValidateAntiForgeryToken, $ANY]
+
+      public $TYPE $METHOD(...) { ... }
+
+      '
+  message: 'Cross-Site Request Forgery (CSRF) (CWE-352): A method that modifies data
+    (POST/PUT/DELETE) is missing Anti-Forgery Token validation. Apply [ValidateAntiForgeryToken]
+    or [AutoValidateAntiforgeryToken] globally.'
+  languages:
+  - csharp
+  severity: ERROR
+  metadata:
+    cwe:
+    - CWE-352
+- id: csharp-auth-missing-authorization-cwe862
+  patterns:
+  - pattern-either:
+    - pattern: '[$ATTR]
+
+        public $TYPE $METHOD(...) { ... }
+
+        '
+    - pattern: '[AllowAnonymous]
+
+        public $TYPE $METHOD(...) { ... }
+
+        '
+  - metavariable-regex:
+      metavariable: $ATTR
+      regex: (?i)(HttpGet|HttpPost|HttpPut|HttpDelete|Route)
+  - pattern-not: '[Authorize]
+
+      public $TYPE $METHOD(...) { ... }
+
+      '
+  - pattern-not: '[Authorize(...)]
+
+      public $TYPE $METHOD(...) { ... }
+
+      '
+  - pattern-not: '[Authorize] [$ANY]
+
+      public $TYPE $METHOD(...) { ... }
+
+      '
+  - pattern-not: '[Authorize(...)] [$ANY]
+
+      public $TYPE $METHOD(...) { ... }
+
+      '
+  - pattern-not: '[$ANY, Authorize]
+
+      public $TYPE $METHOD(...) { ... }
+
+      '
+  - pattern-not: '[$ANY, Authorize(...)]
+
+      public $TYPE $METHOD(...) { ... }
+
+      '
+  message: 'Missing Authorization (CWE-862): This HTTP endpoint lacks an [Authorize]
+    attribute. Ensure appropriate role-based or policy-based authorization is enforced.'
+  languages:
+  - csharp
+  severity: ERROR
+  metadata:
+    cwe:
+    - CWE-862
+- id: csharp-path-traversal-cwe22
+  pattern-either:
+  - pattern: FakeFile.ReadAllText($X + $INPUT, ...)
+  - pattern: FakeFile.ReadAllText($"...{$INPUT}...", ...)
+  - pattern: FakeFile.WriteAllText($X + $INPUT, ...)
+  - pattern: FakeFile.WriteAllText($"...{$INPUT}...", ...)
+  - pattern: new FakeFileStream($X + $INPUT, ...)
+  - pattern: new FakeFileStream($"...{$INPUT}...", ...)
+  - pattern: FakePath.Combine($X, $Y + $INPUT, ...)
+  - pattern: FakePath.Combine($X, $"...{$INPUT}...", ...)
+  message: 'Path Traversal (CWE-22): Input is directly concatenated into a file path.
+    An attacker could use ''../'' to access sensitive files outside the intended directory.'
+  languages:
+  - csharp
+  severity: ERROR
+  metadata:
+    cwe:
+    - CWE-22
+- id: csharp-os-command-injection-cwe78
+  pattern-either:
+  - pattern: FakeProcess.Start($CMD, $ARGS + $INPUT)
+  - pattern: FakeProcess.Start($CMD, $"...{$INPUT}...")
+  - pattern: FakeProcess.Start($INPUT + $ARGS)
+  - pattern: FakeProcess.Start($"...{$INPUT}...")
+  - pattern: '$INFO.FileName = $INPUT + $X;
+
+      '
+  - pattern: '$INFO.FileName = $"...{$INPUT}...";
+
+      '
+  - pattern: '$INFO.Arguments = $X + $INPUT;
+
+      '
+  - pattern: '$INFO.Arguments = $"...{$INPUT}...";
+
+      '
+  message: 'OS Command Injection (CWE-78): Unsanitized user input is used to construct
+    OS commands. An attacker can inject malicious commands executed with the application''s
+    privileges.'
+  languages:
+  - csharp
+  severity: ERROR
+  metadata:
+    cwe:
+    - CWE-78
+- id: csharp-code-injection-cwe94
+  pattern-either:
+  - pattern: FakeCSharpScript.EvaluateAsync($CODE + $INPUT, ...)
+  - pattern: FakeCSharpScript.EvaluateAsync($"...{$INPUT}...", ...)
+  - pattern: $ENGINE.CompileCode($X + $INPUT, ...)
+  - pattern: $ENGINE.CompileCode($"...{$INPUT}...", ...)
+  - pattern: $QUERY.Where($X + $INPUT, ...)
+  - pattern: $QUERY.Where($"...{$INPUT}...", ...)
+  message: 'Code Injection (CWE-94): Unsanitized input is used to construct or compile
+    dynamic code/expressions. This can allow attackers to execute arbitrary code within
+    the application context.'
+  languages:
+  - csharp
+  severity: ERROR
+  metadata:
+    cwe:
+    - CWE-94
+- id: csharp-file-upload-unrestricted-dangerous-type-cwe434
+  pattern-either:
+  - pattern: "if ($FILE.ContentType == $X) {\n    ...\n}\n"
+  - pattern: "if ($FILE.ContentType.Equals(...)) {\n    ...\n}\n"
+  - pattern: 'string $PATH = FakePath.Combine($DIR, $FILE.FileName);
+
+      ...
+
+      $FILE.CopyToAsync(...);
+
+      '
+  - pattern: "using (var $STREAM = new FakeFileStream(..., $FILE.FileName, ...)) {\n\
+      \    ...\n}\n"
+  message: 'Unrestricted Upload of File with Dangerous Type (CWE-434): The application
+    performs dangerous file upload operations without strictly validating file extensions
+    or content magic numbers on the server side. Do not trust Content-Type or original
+    FileName directly.'
+  languages:
+  - csharp
+  severity: ERROR
+  metadata:
+    cwe:
+    - CWE-434
+- id: csharp-null-pointer-dereference-cwe476
+  pattern-either:
+  - pattern: 'var $VAR = $OBJ as $TYPE;
+
+      ...
+
+      $VAR.$MEMBER(...);
+
+      '
+  - pattern: 'var $VAR = $OBJ as $TYPE;
+
+      ...
+
+      $VAR.$PROPERTY;
+
+      '
+  - pattern: 'var $VAR = $LIST.FirstOrDefault(...);
+
+      ...
+
+      $VAR.$MEMBER(...);
+
+      '
+  - pattern: 'var $VAR = $LIST.FirstOrDefault(...);
+
+      ...
+
+      $VAR.$PROPERTY;
+
+      '
+  - pattern: "if ($VAR == null) {\n    ...\n    $VAR.$MEMBER(...);\n}\n"
+  message: 'Null Pointer Dereference (CWE-476): The object is dereferenced without
+    a prior null check after an operation that can result in a null value (such as
+    ''as'' casting, FirstOrDefault, or an explicit null comparison). This will throw
+    a NullReferenceException and may cause a Denial of Service (DoS).'
+  languages:
+  - csharp
+  severity: ERROR
+  metadata:
+    cwe:
+    - CWE-476
+- id: csharp-deserialization-untrusted-data-cwe502
+  pattern-either:
+  - pattern: '$SETTINGS.TypeNameHandling = FakeTypeNameHandling.$ALL;
+
+      ...
+
+      FakeJsonConvert.DeserializeObject(..., $SETTINGS);
+
+      '
+  - pattern: '$SETTINGS.TypeNameHandling = FakeTypeNameHandling.$ALL;
+
+      ...
+
+      FakeJsonConvert.DeserializeObject<$TYPE>(..., $SETTINGS);
+
+      '
+  - pattern: 'FakeBinaryFormatter $BF = new FakeBinaryFormatter(...);
+
+      ...
+
+      $BF.Deserialize(...);
+
+      '
+  - pattern: 'FakeNetDataContractSerializer $NDCS = new FakeNetDataContractSerializer(...);
+
+      ...
+
+      $NDCS.ReadObject(...);
+
+      '
+  message: 'Deserialization of Untrusted Data (CWE-502): Insecure deserialization
+    configurations or tools (such as BinaryFormatter, NetDataContractSerializer, or
+    Newtonsoft.Json with TypeNameHandling enabled) can allow attackers to execute
+    arbitrary code. Ensure strict type validation or safer formatters like System.Text.Json
+    are used.'
+  languages:
+  - csharp
+  severity: ERROR
+  metadata:
+    cwe:
+    - CWE-502
+- id: csharp-auth-incorrect-authorization-cwe863
+  pattern-either:
+  - pattern: '[Authorize, AllowAnonymous]
+
+      public $TYPE $METHOD(...) { ... }
+
+      '
+  - pattern: '[AllowAnonymous, Authorize]
+
+      public $TYPE $METHOD(...) { ... }
+
+      '
+  - pattern: '[Authorize(...), AllowAnonymous]
+
+      public $TYPE $METHOD(...) { ... }
+
+      '
+  - pattern: '[AllowAnonymous]
+
+      [HttpPost($ROUTE)]
+
+      public $TYPE $METHOD(...) { ... }
+
+      '
+  - pattern: "if ($USER.Identity.Name == \"Admin\") {\n    ...\n}\n"
+  message: 'Incorrect Authorization (CWE-863): An incorrect authorization configuration
+    or logical conflict (such as combining [Authorize] and [AllowAnonymous], or using
+    hardcoded username checks) can bypass intended security access controls.'
+  languages:
+  - csharp
+  severity: ERROR
+  metadata:
+    cwe:
+    - CWE-863
+- id: csharp-improper-input-validation-cwe20
+  pattern-either:
+  - pattern: "public $TYPE $METHOD(..., int $INPUT, ...) {\n    ...\n    var $BUF\
+      \ = new $SUBTYPE[$INPUT];\n    ...\n}\n"
+  - pattern: "public $TYPE $METHOD(..., string $URL, ...) {\n    ...\n    return FakeRedirect($URL);\n\
+      }\n"
+  - pattern: "public $TYPE $METHOD(..., string $TYPENAME, ...) {\n    ...\n    Type.GetType($TYPENAME);\n\
+      \    ...\n}\n"
+  message: 'Improper Input Validation (CWE-20): The application receives input from
+    an untrusted source without fully validating its format, length, range, or destination.
+    This can lead to resource exhaustion, Open Redirection, or unauthorized reflection
+    execution.'
+  languages:
+  - csharp
+  severity: ERROR
+  metadata:
+    cwe:
+    - CWE-20
+- id: csharp-improper-access-control-cwe284
+  pattern-either:
+  - pattern: "class $ADMINCONTROLLER : FakeControllerBase {\n    ...\n    public $TYPE\
+      \ $METHOD(...) { ... }\n}\n"
+  - pattern: 'public static string $SECRET_KEY = ...;
+
+      '
+  - pattern: 'public static byte[] $CRYPTO_KEY = ...;
+
+      '
+  - pattern: "[FakeServiceContract]\npublic interface $SERVICE {\n    [FakeOperationContract]\n\
+      \    $TYPE $METHOD(...);\n}\n"
+  message: 'Improper Access Control (CWE-284): The application fails to properly restrict
+    access to sensitive controllers, data fields, or service contracts. Ensure [Authorize]
+    filters are applied or restrict variable visibility with narrower access modifiers
+    (e.g., internal/private).'
+  languages:
+  - csharp
+  severity: ERROR
+  metadata:
+    cwe:
+    - CWE-284
+- id: csharp-information-exposure-cwe200
+  pattern-either:
+  - pattern: "catch (Exception $EX) {\n    ...\n    return FakeBadRequest($EX.ToString());\n\
+      }\n"
+  - pattern: "catch (Exception $EX) {\n    ...\n    return FakeBadRequest($EX.StackTrace);\n\
+      }\n"
+  - pattern: 'FakeLogger.Log($X + $CONFIG.ConnectionString);
+
+      '
+  - pattern: 'FakeLogger.Log($"...{$CONFIG.ConnectionString}...");
+
+      '
+  - pattern: 'return FakeJson($CONFIG.GetSection("ConnectionStrings"));
+
+      '
+  message: 'Exposure of Sensitive Information (CWE-200): Explict leak of internal
+    exceptions (such as StackTrace) or infrastructure secrets (such as ConnectionStrings)
+    detected. This can expose system architecture to attackers, facilitating further
+    exploitation.'
+  languages:
+  - csharp
+  severity: ERROR
+  metadata:
+    cwe:
+    - CWE-200
+- id: csharp-auth-missing-authentication-cwe306
+  pattern-either:
+  - pattern: '[FakeHttpPost($ROUTE)]
+
+      public $TYPE $METHOD(...) { ... }
+
+      '
+  - pattern: "[AllowAnonymous]\n[FakeHttpPost($ROUTE)]\npublic $TYPE $METHOD(...)\n\
+      {\n    ...\n    $SERVICE.TransferFunds(...);\n    ...\n}\n"
+  - pattern: "[AllowAnonymous]\n[FakeHttpPost($ROUTE)]\npublic $TYPE $METHOD(...)\n\
+      {\n    ...\n    $SERVICE.ExecuteCriticalAction(...);\n    ...\n}\n"
+  message: 'Missing Authentication for Critical Function (CWE-306): A critical function
+    or sensitive endpoint is missing appropriate [Authorize] protection, or is explicitly
+    open via [AllowAnonymous]. This allows unauthenticated users to execute administrative
+    or business-critical operations.'
+  languages:
+  - csharp
+  severity: ERROR
+  metadata:
+    cwe:
+    - CWE-306
+- id: csharp-ssrf-httpclient-cwe918
+  pattern-either:
+  - pattern: $CLIENT.GetAsync($X + $INPUT, ...)
+  - pattern: $CLIENT.GetAsync($"...{$INPUT}...", ...)
+  - pattern: $CLIENT.GetStringAsync($X + $INPUT, ...)
+  - pattern: $CLIENT.GetStringAsync($"...{$INPUT}...", ...)
+  - pattern: new Uri($X + $INPUT, ...)
+  - pattern: new Uri($"...{$INPUT}...", ...)
+  - pattern: FakeWebRequest.Create($X + $INPUT, ...)
+  - pattern: FakeWebRequest.Create($"...{$INPUT}...", ...)
+  message: 'Server-Side Request Forgery (CWE-918): Unsanitized user input is used
+    to construct a target URL for server-side network requests. An attacker can manipulate
+    this input to scan internal networks, access private services, or exploit metadata
+    APIs.'
+  languages:
+  - csharp
+  severity: ERROR
+  metadata:
+    cwe:
+    - CWE-918
+- id: csharp-command-injection-cwe77
+  pattern-either:
+  - pattern: FakeProcess.Start($CMD, $X + $INPUT, ...)
+  - pattern: FakeProcess.Start($CMD, $"...{$INPUT}...", ...)
+  - pattern: '$INFO.Arguments = $X + $INPUT;
+
+      '
+  - pattern: '$INFO.Arguments = $"...{$INPUT}...";
+
+      '
+  - pattern: '$INFO.FileName = $X + $INPUT;
+
+      '
+  - pattern: '$INFO.FileName = $"...{$INPUT}...";
+
+      '
+  message: 'Command Injection (CWE-77): Unsanitized user input is used to construct
+    system commands or arguments. Attackers can inject command separators (e.g., '';'',
+    ''&&'', ''|'') to execute arbitrary shell commands on the server.'
+  languages:
+  - csharp
+  severity: ERROR
+  metadata:
+    cwe:
+    - CWE-77
+- id: csharp-idor-authorization-bypass-cwe639
+  pattern-either:
+  - pattern: "public $TYPE $METHOD(..., int $ID, ...) {\n    ...\n    var $RES = $REPO.GetById($ID);\n\
+      \    ...\n    return FakeOk($RES);\n}\n"
+  - pattern: "public $TYPE $METHOD(..., FakeOrder $ORDER, ...) {\n    ...\n    $REPO.Update($ORDER);\n\
+      \    ...\n}\n"
+  - pattern: 'string $QUERY = FakeString.Format("SELECT * FROM Orders WHERE Id = {0}",
+      $INPUT);
+
+      '
+  message: 'Authorization Bypass Through User-Controlled Key (CWE-639 / IDOR): The
+    application direct accesses resources based on user-supplied keys without cross-checking
+    if the current authenticated user owns that resource. Ensure you add an ownership
+    check (e.g., query by both resource ID and current user ID).'
+  languages:
+  - csharp
+  severity: ERROR
+  metadata:
+    cwe:
+    - CWE-639
+- id: csharp-resource-limit-allocation-cwe770
+  pattern-either:
+  - pattern: "public $TYPE $METHOD(..., int $SIZE, ...) {\n    ...\n    var $ARR =\
+      \ new $T[$SIZE];\n    ...\n}\n"
+  - pattern: 'FakeTask.Delay($MS);
+
+      '
+  - pattern: "public $TYPE $METHOD(..., int $COUNT, ...) {\n    ...\n    for (int\
+      \ $I = 0; $I < $COUNT; $I++) {\n        ...\n        $FX.ExpensiveOperation(...);\n\
+      \        ...\n    }\n    ...\n}\n"
+  message: 'Allocation of Resources Without Limits or Throttling (CWE-770): User-controlled
+    input is used directly to determine the amount of resources (memory allocation,
+    execution loops, or delay timers) to allocate. This can easily lead to Denial
+    of Service (DoS) via resource exhaustion.'
+  languages:
+  - csharp
+  severity: ERROR
+  metadata:
+    cwe:
+    - CWE-770
+- id: csharp-improper-authentication-cwe287
+  pattern-either:
+  - pattern: "public $TYPE $METHOD(..., string $USER, string $PASS, ...)\n{\n    var\
+      \ $U = $REPO.FindUser($USER);\n    return FakeOk($AUTH.IssueToken($U));\n}\n"
+  - pattern: 'string $UID = $REQ.GetHeaderValue("X-User-ID");
+
+      ...
+
+      FakeSignIn($UID);
+
+      '
+  - pattern: '$PARAMS.ValidateIssuerSigningKey = false;
+
+      '
+  message: 'Improper Authentication (CWE-287): The application implements a flawed
+    authentication mechanism, such as omitting password validation before token issuance,
+    relying on untrusted HTTP headers for identity, or disabling JWT signing key validation.'
+  languages:
+  - csharp
+  severity: ERROR
+  metadata:
+    cwe:
+    - CWE-287
+- id: csharp-improper-privilege-management-cwe269
+  pattern-either:
+  - pattern: 'var $CTX = $ID.Impersonate();
+
+      '
+  - pattern: 'FakeWindowsImpersonationContext $CTX = $ID.Impersonate();
+
+      '
+  - pattern: "public $TYPE $METHOD(..., string $NEWROLE, ...)\n{\n    ...\n    $USER.AddRole($NEWROLE);\n\
+      \    ...\n}\n"
+  - pattern: 'FakeThread.CurrentPrincipal = new FakeGenericPrincipal(...);
+
+      '
+  message: 'Improper Privilege Management (CWE-269): The application improperly manages
+    privileges, such as failing to revoke impersonated tokens, dynamically allowing
+    untrusted actors to self-assign high-privileged roles, or forced global thread
+    principal elevation. This can lead to horizontal or vertical privilege escalation.'
+  languages:
+  - csharp
+  severity: ERROR
+  metadata:
+    cwe:
+    - CWE-269
+- id: csharp-hardcoded-credentials-cwe798
+  pattern-either:
+  - pattern: 'string $VAR = "...Password=...";
+
+      '
+  - pattern: 'string $VAR = "AIzaSyA1234567890-B_ExampleKeyString";
+
+      '
+  - pattern: 'string $VAR = "SuperSecurePassword123!";
+
+      '
+  - pattern: 'new FakeSymmetricSecurityKey(...)
+
+      '
+  message: 'Use of Hard-coded Credentials (CWE-798): Hard-coded credentials, connection
+    strings, or cryptographic keys detected. Store credentials securely in appsettings.json
+    or Environment Variables.'
+  languages:
+  - csharp
+  severity: ERROR
+  metadata:
+    cwe:
+    - CWE-798
+- id: csharp-integer-overflow-cwe190
+  pattern-either:
+  - pattern: '$VAR = $COUNT * $SIZE;
+
+      '
+  - pattern: '$VAR += $INPUT;
+
+      '
+  - pattern: 'FakeMath.Abs(...)
+
+      '
+  message: 'Integer Overflow or Wraparound (CWE-190): Unchecked arithmetic operation
+    on integers may lead to wraparound. Ensure inputs are validated against maximum
+    boundaries (e.g., int.MaxValue) or use checked blocks to catch OverflowException.'
+  languages:
+  - csharp
+  severity: ERROR
+  metadata:
+    cwe:
+    - CWE-190
+- id: csharp-uncontrolled-resource-consumption-cwe400
+  pattern-either:
+  - pattern: 'new FakeRegex($PATT)
+
+      '
+  - pattern: 'new FakeRegex($PATT, $OPTS)
+
+      '
+  - pattern: 'FakeFile.ReadAllBytes($PATH)
+
+      '
+  - pattern: 'FakeFile.ReadAllText($PATH)
+
+      '
+  - pattern: "public $TYPE $METHOD(..., int $DEPTH, ...)\n{\n    ...\n    $METHOD(...,\
+      \ $DEPTH + 1, ...);\n    ...\n}\n"
+  message: 'Uncontrolled Resource Consumption (CWE-400): Found potential resource
+    exhaustion vectors such as Regex without MatchTimeout, unbounded file reads, or
+    unbounded recursive calls. This can easily be exploited to cause a Denial of Service
+    (DoS).'
+  languages:
+  - csharp
+  severity: ERROR
+  metadata:
+    cwe:
+    - CWE-400
+- id: csharp-backdoor-magic-param-cwe912
+  pattern-either:
+  # 原本 "$PARAM"/"$SECRET" 寫在引號內，semgrep 視為字面字串，實際匹配不到任何東西。
+  # 改以未加引號的 metavariable 捕捉被比較的字面量，再用 metavariable-regex 要求其含
+  # 後門關鍵字，避免退化成「query 參數 == 任意字串」而誤報一般路由分派（如 =="delete"）。
+  - patterns:
+    - pattern-either:
+      - pattern: "if ($REQ.Query[...] == $SECRET) {\n    ...\n}\n"
+      - pattern: "if ($REQ.QueryString.Contains($SECRET)) {\n    ...\n}\n"
+    - metavariable-regex:
+        metavariable: $SECRET
+        regex: (?i).*(backdoor|override|bypass|magic|master|godmode|god_mode|skeleton|secret|superuser|root_access|dev_?mode|maintenance).*
+  - pattern: "if ($VAR == \"admin_backdoor\" || $VAR == \"debug_override_pass\") {\n\
+      \    ...\n}\n"
+  - pattern: "if ($MODEL.Role == \"BackdoorAdmin\" || $MODEL.SecretKey == \"SkeletonKey\"\
+      ) {\n    ...\n}\n"
+  message: 'HttpParameterContamination / Hidden Backdoor Functionality (CWE-912):
+    Detecting hardcoded magic parameters or backdoor keys that bypass regular authentication/authorization
+    controls. Remove hidden control mechanisms from production code.'
+  languages:
+  - csharp
+  severity: ERROR
+  metadata:
+    cwe:
+    - CWE-912
+- id: csharp-untrusted-inclusion-cwe829
+  pattern-either:
+  - pattern: System.Reflection.Assembly.LoadFrom($PATH)
+  - pattern: System.Reflection.Assembly.LoadFile($PATH)
+  - pattern: Assembly.LoadFrom($PATH)
+  - pattern: Assembly.LoadFile($PATH)
+  - pattern: System.Windows.Markup.XamlReader.Load($STREAM)
+  - pattern: XamlReader.Load($STREAM)
+  - pattern: '$CLIENT.DownloadFile("http://" + $URL, $DEST);
+
+      ...
+
+      Assembly.LoadFrom($DEST);
+
+      '
+  message: 'Inclusion of Functionality from Untrusted Control Sphere (CWE-829): Dynamic
+    loading of assemblies, unvalidated XAML, or plugins from untrusted sources or
+    insecure channels can lead to Arbitrary Code Execution (RCE). Validate files before
+    inclusion or enforce strong name signing.'
+  languages:
+  - csharp
+  severity: ERROR
+  metadata:
+    cwe:
+    - CWE-829
+- id: csharp-property-pollution-cwe1321
+  pattern-either:
+  - pattern: "foreach (var $KEY in $DICT.Keys) {\n    ...\n    var $PROP = $OBJ.GetType().GetProperty($KEY);\n\
+      \    $PROP.SetValue($OBJ, $DICT[$KEY]);\n}\n"
+  - pattern: "if ($KEY == \"__proto__\" || $KEY == \"constructor\") {\n    // Missing\
+      \ return or exception, continuing execution leading to pollution\n    ...\n\
+      }\n"
+  - pattern: 'var $SETTINGS = new JsonSerializerSettings();
+
+      ...
+
+      $SETTINGS.TypeNameHandling = TypeNameHandling.All;
+
+      '
+  message: 'Improper Control of Object Attributes / Property Pollution (CWE-1321):
+    Dynamically setting object properties via reflection using unvalidated user keys,
+    or enabling unsafe JSON TypeNameHandling, allows attackers to pollute application
+    state or achieve remote code execution.'
+  languages:
+  - csharp
+  severity: ERROR
+  metadata:
+    cwe:
+    - CWE-1321
+- id: csharp-improper-cert-validation-cwe295
+  pattern-either:
+  - pattern: ServicePointManager.ServerCertificateValidationCallback += ($S, $CERT,
+      $CHAIN, $ERRORS) => true
+  - pattern: ServicePointManager.ServerCertificateValidationCallback = ($S, $CERT,
+      $CHAIN, $ERRORS) => true
+  - pattern: "new HttpClientHandler {\n    ...,\n    ServerCertificateCustomValidationCallback\
+      \ = ($REQ, $CERT, $CHAIN, $ERRORS) => true,\n    ...\n}\n"
+  - pattern: $HANDLER.ServerCertificateCustomValidationCallback = ($REQ, $CERT, $CHAIN,
+      $ERRORS) => true
+  - pattern: "bool $FUNC(object $S, X509Certificate $CERT, X509Chain $CHAIN, SslPolicyErrors\
+      \ $ERRORS) {\n    return true;\n}\n"
+  - pattern: $X.ServiceCertificate.Authentication.CertificateValidationMode = X509CertificateValidationMode.None
+  - pattern: $X.ServiceCertificate.Authentication.CertificateValidationMode = 0
+  message: 'Improper Certificate Validation (CWE-295): Trusting all certificates blindly
+    by returning true or setting validation mode to None disables TLS protection and
+    exposes the application to Man-in-the-Middle (MITM) attacks.'
+  languages:
+  - csharp
+  severity: ERROR
+  metadata:
+    cwe:
+    - CWE-295
+- id: csharp-weak-hash-cwe328
+  pattern-either:
+  - pattern: new System.Security.Cryptography.MD5CryptoServiceProvider(...)
+  - pattern: new System.Security.Cryptography.SHA1CryptoServiceProvider(...)
+  - pattern: new System.Security.Cryptography.SHA1Managed(...)
+  - pattern: new MD5CryptoServiceProvider(...)
+  - pattern: new SHA1CryptoServiceProvider(...)
+  - pattern: new SHA1Managed(...)
+  - pattern: System.Security.Cryptography.MD5.Create(...)
+  - pattern: System.Security.Cryptography.SHA1.Create(...)
+  - pattern: MD5.Create(...)
+  - pattern: SHA1.Create(...)
+  - pattern: System.Security.Cryptography.HashAlgorithm.Create("$HASH")
+  - pattern: System.Security.Cryptography.CryptoConfig.CreateFromName("$HASH")
+  - pattern: HashAlgorithm.Create("$HASH")
+  - pattern: CryptoConfig.CreateFromName("$HASH")
+  metavariable-regex:
+    $HASH: ^(?i)(md5|sha1|system\.security\.cryptography\.(md5|sha1))$
+  message: 'Use of Weak Cryptographic Hash (CWE-328): MD5 and SHA-1 algorithms are
+    cryptographically broken and vulnerable to collision attacks. Upgrade to safer
+    alternatives like SHA-256, SHA-384, or SHA-512.'
+  languages:
+  - csharp
+  severity: ERROR
+  metadata:
+    cwe:
+    - CWE-328

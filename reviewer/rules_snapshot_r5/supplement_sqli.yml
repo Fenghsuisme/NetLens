@@ -1,0 +1,232 @@
+rules:
+  # ════════════════════════════════════════════════════════
+  # SQL 注入補強規則（CWE-89）
+  #
+  #
+  #   漏抓樣本：
+  #     Java  jdbcTemplate.queryForList(拼接的 sql)
+  #     PHP   $this->db->where(拼接的字串)          （CodeIgniter）
+  #     JS    knex.raw(`...${變數}...`)
+  #     JS    .orderByRaw(`${變數} ASC`)
+  #
+  #   最後一種開發者最容易在此拼接，是真實世界的高頻注入點。
+  #
+  # 設計要點：
+  #   偵測「危險的 sink（raw 查詢方法）」+「參數含字串拼接或模板字串」，
+  #   而非只看方法名——這樣才能區分
+  #     knex.raw('SELECT 1')              安全，不報
+  #     knex.raw(`SELECT ${userInput}`)   危險，要報
+  # ════════════════════════════════════════════════════════
+
+  # ── Java：JdbcTemplate / Statement 系列 ──
+  # 情況一：拼接直接寫在呼叫參數裡
+  - id: java-sqli-inline-concat
+    languages: [java]
+    severity: ERROR
+    message: >-
+      SQL Injection (CWE-89): 查詢字串以字串拼接組成後傳入執行方法。
+      應改用 PreparedStatement 或具名參數（NamedParameterJdbcTemplate）。
+    metadata:
+      cwe:
+        - CWE-89
+      category: security
+      confidence: HIGH
+    pattern-either:
+      - pattern: $T.queryForList($A + $B, ...)
+      - pattern: $T.queryForObject($A + $B, ...)
+      - pattern: $T.queryForMap($A + $B, ...)
+      - pattern: $T.query($A + $B, ...)
+      - pattern: $T.update($A + $B, ...)
+      - pattern: $T.execute($A + $B, ...)
+      - pattern: $T.createQuery($A + $B, ...)
+      - pattern: $T.createNativeQuery($A + $B, ...)
+      - pattern: $T.executeQuery($A + $B)
+      - pattern: $T.executeUpdate($A + $B)
+
+  # 情況二：先拼接成變數，再傳入（實務上更常見）
+  # 用 <... ...> 讓中間可以隔任意程式碼
+  - id: java-sqli-var-concat
+    languages: [java]
+    severity: ERROR
+    message: >-
+      SQL Injection (CWE-89): SQL 字串以拼接方式組成後傳入查詢執行方法。
+      即使部分參數看似受控，只要有任一外部輸入被拼接即構成注入風險。
+      應改用 PreparedStatement 或 NamedParameterJdbcTemplate。
+    metadata:
+      cwe:
+        - CWE-89
+      category: security
+      confidence: HIGH
+    patterns:
+      - pattern: |
+          String $SQL = $A + $B;
+          ...
+      - pattern-either:
+          - pattern: |
+              String $SQL = ...;
+              ...
+              $T.queryForList($SQL, ...);
+          - pattern: |
+              String $SQL = ...;
+              ...
+              $T.queryForObject($SQL, ...);
+          - pattern: |
+              String $SQL = ...;
+              ...
+              $T.queryForMap($SQL, ...);
+          - pattern: |
+              String $SQL = ...;
+              ...
+              $T.query($SQL, ...);
+          - pattern: |
+              String $SQL = ...;
+              ...
+              $T.update($SQL, ...);
+          - pattern: |
+              String $SQL = ...;
+              ...
+              $T.execute($SQL, ...);
+          - pattern: |
+              String $SQL = ...;
+              ...
+              $T.executeQuery($SQL);
+          - pattern: |
+              String $SQL = ...;
+              ...
+              $T.executeUpdate($SQL);
+          - pattern: |
+              String $SQL = ...;
+              ...
+              $T.createQuery($SQL, ...);
+          - pattern: |
+              String $SQL = ...;
+              ...
+              $T.createNativeQuery($SQL, ...);
+
+  # ── JavaScript / TypeScript：Knex / Sequelize / TypeORM 的 raw 系列 ──
+  - id: js-sqli-raw-template
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: >-
+      SQL Injection (CWE-89): 在 raw 查詢中使用模板字串或字串拼接嵌入變數，
+      繞過了查詢建構器的參數化保護。應改用綁定參數（如 knex.raw('?', [value])）。
+    metadata:
+      cwe:
+        - CWE-89
+      category: security
+      confidence: HIGH
+    patterns:
+      - pattern-either:
+          - pattern: $DB.raw(`...`)
+          - pattern: $DB.whereRaw(`...`)
+          - pattern: $DB.orderByRaw(`...`)
+          - pattern: $DB.havingRaw(`...`)
+          - pattern: $DB.groupByRaw(`...`)
+          - pattern: $DB.joinRaw(`...`)
+          - pattern: $DB.selectRaw(`...`)
+          - pattern: $DB.query(`...`)
+          - pattern: $DB.$METHOD(`...`)
+      # 模板字串必須含插值 ${...} 才危險
+      - pattern-regex: \$\{[^}]+\}
+
+  - id: js-sqli-raw-concat
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: >-
+      SQL Injection (CWE-89): 在 raw 查詢中以字串拼接嵌入變數。
+      應改用綁定參數。
+    metadata:
+      cwe:
+        - CWE-89
+      category: security
+      confidence: HIGH
+    patterns:
+      - pattern-either:
+          - pattern: $DB.raw($A + $B)
+          - pattern: $DB.whereRaw($A + $B)
+          - pattern: $DB.orderByRaw($A + $B)
+          - pattern: $DB.havingRaw($A + $B)
+          - pattern: $DB.joinRaw($A + $B)
+          - pattern: $DB.query($A + $B)
+
+  # ── PHP：CodeIgniter / Laravel / 原生 ──
+  - id: php-sqli-raw-concat
+    languages: [php]
+    severity: ERROR
+    message: >-
+      SQL Injection (CWE-89): 查詢條件以字串拼接組成。
+      應改用查詢綁定（CodeIgniter 的 where('col', $val) 或 Laravel 的 whereRaw 綁定參數）。
+    metadata:
+      cwe:
+        - CWE-89
+      category: security
+      confidence: HIGH
+    patterns:
+      - pattern-either:
+          - pattern: $DB->where($X . $Y, ...)
+          - pattern: $DB->where($X . $Y)
+          - pattern: $DB->whereRaw($X . $Y, ...)
+          - pattern: $DB->having($X . $Y)
+          - pattern: $DB->order_by($X . $Y)
+          - pattern: $DB->query($X . $Y)
+          - pattern: $DB->select($X . $Y)
+          - pattern: $DB->join($X . $Y, ...)
+          - pattern: DB::raw($X . $Y)
+          - pattern: DB::select($X . $Y)
+          - pattern: DB::statement($X . $Y)
+
+  # ── PHP：拼接後的變數傳入查詢（兩段式，最常見的寫法）──
+  - id: php-sqli-concat-var-to-query
+    languages: [php]
+    severity: ERROR
+    message: >-
+      SQL Injection (CWE-89): SQL 條件字串以拼接方式組成後傳入查詢方法。
+    metadata:
+      cwe:
+        - CWE-89
+      category: security
+      confidence: MEDIUM
+    patterns:
+      - pattern-either:
+          - pattern: |
+              $WHERE = "..." . $VAR . "...";
+              ...
+              $DB->where($WHERE, ...);
+          - pattern: |
+              $WHERE = "..." . $VAR . "...";
+              ...
+              $DB->where($WHERE);
+          - pattern: |
+              $SQL = "..." . $VAR . "...";
+              ...
+              $DB->query($SQL);
+
+  # ── Python：ORM raw 系列（現有規則只認 execute，補這些）──
+  - id: python-sqli-orm-raw
+    languages: [python]
+    severity: ERROR
+    message: >-
+      SQL Injection (CWE-89): 在 ORM 的 raw 查詢中使用字串拼接或格式化。
+      應改用參數化查詢（params=[...] 或 :name 綁定）。
+    metadata:
+      cwe:
+        - CWE-89
+      category: security
+      confidence: HIGH
+    patterns:
+      - pattern-either:
+          - pattern: $M.raw($SQL, ...)
+          - pattern: $M.raw($SQL)
+          - pattern: $M.extra(where=[$SQL], ...)
+          - pattern: text($SQL)
+          - pattern: $S.execute(text($SQL))
+          - pattern: $C.executescript($SQL)
+          - pattern: $C.executemany($SQL, ...)
+      - metavariable-pattern:
+          metavariable: $SQL
+          patterns:
+            - pattern-either:
+                - pattern: $A + $B
+                - pattern: f"..."
+                - pattern: $S % $ARGS
+                - pattern: $S.format(...)

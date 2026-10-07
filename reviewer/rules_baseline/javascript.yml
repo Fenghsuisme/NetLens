@@ -1,0 +1,566 @@
+rules:
+  - id: js-hardcoded-secret
+    pattern-either:
+      - pattern: const password = "..."
+      - pattern: const secret = "..."
+      - pattern: const apiKey = "..."
+      - pattern: const token = "..."
+    message: "Hardcoded credentials (CWE-798)"
+    languages: [javascript, typescript]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-798']
+
+  - id: js-command-injection
+    pattern-either:
+      - pattern: exec(...)
+      - pattern: execSync(...)
+      - pattern: spawn(...)
+      - pattern: spawnSync(...)
+      - pattern: execFile(...)
+      - pattern: execFileSync(...)
+      - pattern: require('child_process').exec(...)
+      - pattern: require('child_process').execSync(...)
+    message: "Command injection risk (CWE-78): External data or dynamic strings passed to shell execution primitives enable malicious command execution."
+    languages: [javascript, typescript]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-78']
+
+  - id: js-sql-injection
+    pattern-either:
+      - pattern: $DB.query(...)
+      - pattern: $DB.execute(...)
+      - pattern: $CONN.query(...)
+      - pattern: $SEQ.query(...)
+      - pattern: $PRISMA.$queryRawUnsafe(...)
+    message: "SQL Injection risk (CWE-89)"
+    languages: [javascript, typescript]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-89']
+
+  - id: js-xss
+    pattern-either:
+      - pattern: $EL.innerHTML = $X
+      - pattern: document.write(...)
+      - pattern: $(...).html(...)
+      - pattern: $(...).append(...)
+      - pattern: $EL.outerHTML = $X
+    message: "Cross-site Scripting risk (CWE-79)"
+    languages: [javascript, typescript]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-79']
+
+  - id: js-code-execution
+    pattern-either:
+      - pattern: eval(...)
+      - pattern: Function(...)
+      - pattern: new Function(...)
+      - pattern: setTimeout($STR, ...)
+      - pattern: setInterval($STR, ...)
+    pattern-not:
+      - pattern: setTimeout(function(...) {...}, ...)
+      - pattern: setTimeout(() => {...}, ...)
+      - pattern: setInterval(function(...) {...}, ...)
+      - pattern: setInterval(() => {...}, ...)
+    message: "Code execution risk (CWE-94): Dynamic evaluation of strings via eval, Function constructor, or string-based timers can lead to arbitrary JavaScript injection."
+    languages: [javascript, typescript]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-94']
+
+  - id: js-prototype-pollution
+    pattern-either:
+      - pattern: $OBJ.__proto__ = $VAL
+      - pattern: Object.prototype[$KEY] = $VAL
+    message: "Prototype Pollution vulnerability (CWE-1321)"
+    languages: [javascript, typescript]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-1321']
+
+  - id: js-disabled-ssl
+    pattern-either:
+      - pattern: agentOptions.rejectUnauthorized = false
+      - pattern: rejectUnauthorized = false
+    message: "SSL/TLS certificate verification is disabled (CWE-295)"
+    languages: [javascript, typescript]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-295']
+
+  - id: js-information-exposure-cwe200
+    pattern-either:
+      - pattern: |
+          app.use(function(err, req, res, next) {
+              ...
+              res.send(..., err.stack);
+          });
+      - pattern: |
+          app.use(function(err, req, res, next) {
+              ...
+              res.json(err);
+          });
+      - pattern: res.json(process.env)
+    message: "Exposure of Sensitive Information to an Unauthorized Actor (CWE-200): Directly sending stack traces, raw error objects, or raw environment variables (process.env) over HTTP response leaks critical system components or application state."
+    languages: [javascript, typescript]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-200']
+
+  - id: js-csrf
+    pattern-either:
+      - pattern: ignoreMethods
+      - pattern: "sameSite: 'none'"
+      - pattern: 'sameSite: "none"'
+    message: "Missing or disabled CSRF protection mechanism (CWE-352)"
+    languages: [javascript, typescript]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-352']
+
+  - id: js-missing-authorization
+    pattern-either:
+      - pattern: |
+          router.$METHOD('/api/admin/*', function(req, res) {
+              ...
+          })
+      - pattern: checkAuthorization = false
+      - pattern: verifyToken = false
+    message: "Missing Authorization (CWE-862)"
+    languages: [javascript, typescript]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-862']
+
+  - id: js-out-of-bounds-write
+    pattern-either:
+      - pattern: $BUF.write(..., ..., ...)
+      - pattern: $BUF.writeUInt8(..., ...)
+      - pattern: $BUF.writeInt32LE(..., ...)
+      - pattern: |
+          $VIEW = new DataView($BUF)
+          ...
+          $VIEW.setUint8(...)
+      - pattern: $ARRAY[$IDX] = $VAR
+      - pattern: $BUF.copy(...)
+    message: "Out-of-bounds Write risk (CWE-787)"
+    languages: [javascript, typescript]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-787']
+
+  - id: js-path-traversal
+    pattern-either:
+      - pattern: fs.readFile(..., ...)
+      - pattern: fs.readFileSync(...)
+      - pattern: fs.writeFile(..., ...)
+      - pattern: fs.createReadStream(...)
+      - pattern: path.join(...)
+      - pattern: path.resolve(...)
+      - pattern: $DECOMPRESS.extract(...)
+    message: "Path Traversal / Arbitrary File Access risk (CWE-22)"
+    languages: [javascript, typescript]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-22']
+
+  - id: js-use-after-free
+    pattern-either:
+      - pattern: |
+          $BUF.fill(0)
+          ...
+          $BUF.readUInt8(...)
+      - pattern: |
+          $CONN.destroy()
+          ...
+          $CONN.write(...)
+      - pattern: |
+          cluster.disconnect()
+          ...
+          cluster.worker.send(...)
+    message: "Use After Free risk (CWE-416)"
+    languages: [javascript, typescript]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-416']
+
+  - id: js-out-of-bounds-read
+    pattern-either:
+      - pattern: $BUF.readUInt8($OFFSET)
+      - pattern: $BUF.readInt32LE($OFFSET)
+      - pattern: |
+          $VIEW = new DataView($BUF);
+          ...
+          $VIEW.getUint8($OFFSET);
+    message: "Out-of-bounds Read risk (CWE-125): Verify buffer offset prior to accessing fragments."
+    languages: [javascript, typescript]
+    severity: WARNING
+    metadata:
+      cwe: ['CWE-125']
+
+  - id: js-buffer-overflow-cwe120
+    pattern-either:
+      - pattern: $BUF.copy($TARGET, $TARGET_START, $SOURCE_START)
+      - pattern: Buffer.allocUnsafe($SIZE)
+      - pattern: $BUF.fill($VAL, $START)
+    message: "Buffer Management Risk (CWE-120): Utilizing uninitialized buffers or copying data without explicitly binding the maximum read/write lengths can overflow allocation limits."
+    languages: [javascript, typescript]
+    severity: WARNING
+    metadata:
+      cwe: ['CWE-120']
+
+  - id: js-unrestricted-upload-cwe434
+    pattern-either:
+      - pattern: $REQ.files.$FILE.mv(...)
+      - pattern: fs.createWriteStream(path.join($DIR, $REQ.file.originalname))
+      - pattern: fs.writeFileSync(path.join($DIR, $REQ.file.originalname), ...)
+    message: "Unrestricted Upload of File with Dangerous Type (CWE-434): Storing user-uploaded files using unvalidated original filenames enables attackers to upload malicious scripts (e.g., .jsp, .php, webshells) to public directories."
+    languages: [javascript, typescript]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-434']
+
+  - id: js-null-pointer-dereference-cwe476
+    pattern-either:
+      - pattern: |
+          $X = null;
+          ...
+          $X.$ATTR
+      - pattern: |
+          $X = undefined;
+          ...
+          $X.$ATTR
+    message: "Null Pointer Dereference / Property Access on Null risk (CWE-476): Accessing properties on a variable explicitly initialized to null or undefined will trigger a runtime TypeError."
+    languages: [javascript, typescript]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-476']
+
+  - id: js-stack-buffer-overflow-cwe121
+    pattern-either:
+      - pattern: $BUF.write($STR, $OFFSET, $LENGTH)
+      - pattern: $VIEW.setUint8($OFFSET, $VAL)
+    message: "Stack-based / Fixed-size Buffer Overflow risk (CWE-121): Writing structural data or raw network payloads to localized structures without ensuring the offset and length strictly fit inside the allocated segment boundaries."
+    languages: [javascript, typescript]
+    severity: WARNING
+    metadata:
+      cwe: ['CWE-121']
+
+  - id: js-deserialization-cwe502
+    pattern-either:
+      - pattern: $SERIALIZE.unserialize(...)
+      - pattern: require('node-serialize').unserialize(...)
+      - pattern: $YAML.load(...)
+    pattern-not:
+      - pattern: $YAML.safeLoad(...)
+    message: "Deserialization of Untrusted Data risk (CWE-502): Passing arbitrary user strings to deserialization engines can trigger instant execution of embedded anonymous functions or prototype injection vectors."
+    languages: [javascript, typescript]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-502']
+
+  - id: js-heap-buffer-overflow-cwe122
+    pattern-either:
+      - pattern: |
+          $BUF = Buffer.alloc($SIZE);
+          ...
+          $SRC.copy($BUF, $TARGET_START, $SRC_START, $SRC_END);
+      - pattern: |
+          $BUF = Buffer.alloc($SIZE);
+          ...
+          $BUF.write($STR, $OFFSET, $LENGTH);
+    message: "Heap-based Buffer Overflow risk (CWE-122): Writing into a dynamically allocated Node.js Heap Buffer with unchecked offsets or source sizes can bypass initialization logic and corrupt application memory."
+    languages: [javascript, typescript]
+    severity: WARNING
+    metadata:
+      cwe: ['CWE-122']
+
+  - id: js-incorrect-authorization-cwe863
+    pattern-either:
+      - pattern: |
+          if (req.user) {
+              next();
+          }
+    message: "Incorrect Authorization risk (CWE-863)"
+    languages: [javascript, typescript]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-863']
+
+  - id: js-improper-input-validation-cwe20
+    pattern-either:
+      - pattern: $REGEX.test(...)
+      - pattern: |
+          let $QTY = parseInt(...);
+          ...
+          let $TOTAL = $PRICE * $QTY;
+    message: "Improper Input Validation risk (CWE-20)"
+    languages: [javascript, typescript]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-20']
+
+  - id: js-improper-access-control-cwe284
+    pattern-either:
+      - pattern: |
+          router.get('/api/admin/*', function(...) { ... })
+      - pattern: $DB.updateProfile(...)
+      - pattern: $DB.update(...)
+    message: "Improper Access Control risk (CWE-284)"
+    languages: [javascript, typescript]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-284']
+
+  - id: js-missing-authentication-cwe306
+    pattern-either:
+      - pattern: |
+          app.post('/api/checkout/pay', function(...) { ... })
+      - pattern: |
+          router.post('/account/delete', function(...) { ... })
+    message: "Missing Authentication for Critical Function (CWE-306): Crucial operations changing accounting state or user identity structure must embed authentication middleware directly into the route signature."
+    languages: [javascript, typescript]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-306']
+
+  - id: js-ssrf-cwe918
+    pattern-either:
+      - pattern: axios.get($URL, ...)
+      - pattern: axios.post($URL, ...)
+      - pattern: fetch($URL, ...)
+    message: "Server-Side Request Forgery risk (CWE-918): Issuing network requests to arbitrary locations based on untrusted parameters permits unauthorized pivoting or cloud instance token theft."
+    languages: [javascript, typescript]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-918']
+
+  - id: js-command-neutralization-cwe77
+    pattern-either:
+      - pattern: child_process.exec(...)
+      - pattern: exec(...)
+    message: "Improper Neutralization of Special Elements used in a Command (CWE-77)"
+    languages: [javascript, typescript]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-77']
+
+  - id: js-bypass-authorization-cwe639
+    pattern-either:
+      - pattern: |
+          db.collection(...).findOne({ _id: req.query.$KEY })
+      - pattern: |
+          $DB.updateAccount(req.body.id, ...)
+    message: "Authorization Bypass Through User-Controlled Key (CWE-639): The application utilizes user-supplied keys directly in querying or updating accounts without cross-checking the action identity context."
+    languages: [javascript, typescript]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-639']
+
+  - id: js-unlimited-resource-allocation-cwe770
+    pattern-either:
+      - pattern: multer()
+      - pattern: express.json()
+    message: "Allocation of Resources Without Limits or Throttling (CWE-770): Initializing body parsers or file upload controllers without explicit size configurations lets remote clients trigger excessive payload delivery to saturate node stack limits."
+    languages: [javascript, typescript]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-770']
+
+  - id: javascript-improper-authentication-cwe287
+    pattern-either:
+      # Pattern 1: 密碼/憑證硬編碼字串直接進行 === 或 == 的時序攻擊風險比對
+      - pattern: |
+          $STR === "SuperSecretNodePassword2026!"
+      - pattern: |
+          $STR == "SuperSecretNodePassword2026!"
+
+      # Pattern 2: 認證中間件漏洞 — 在分支中雖然呼叫了 next()，但隨後直接 return，且該分支內缺乏安全上下文指派的特徵
+      - pattern: |
+          if ($COND) {
+              next();
+              return;
+          }
+
+      # Pattern 3: 直擊不安全的 JWT 驗證 — 只要代碼中出現與 "none" 演算法比對的字串特徵，立即攔截
+      - pattern: |
+          $ALG === "none"
+      - pattern: |
+          $ALG == "none"
+
+    message: "Improper Authentication (CWE-287): Flawed authentication mechanism detected in JavaScript. Avoid using strict equality (===) for sensitive password string comparisons to mitigate timing attacks; use crypto.timingSafeEqual instead. Ensure middleware chains do not invoke next() unconditionally in early return branches without proper authentication state context, and never accept 'none' algorithm for JWT."
+    languages: [javascript]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-287']
+
+  - id: javascript-improper-privilege-management-cwe269
+    pattern-either:
+      # Pattern 1: 捕捉直接將來自請求（body/query）的角色或權限屬性，直接指定給使用者物件的危險特徵
+      - pattern: |
+          $USER.role = req.body.role
+      - pattern: |
+          $USER.isAdmin = req.body.isAdmin
+
+      # Pattern 2: 捕捉在 Node.js 中執行子程序（exec/execSync），但設定參數（options）中完全缺失 uid/gid 降權設定的特徵
+      - pattern: |
+          child_process.execSync($CMD, {
+              ...
+          })
+
+    message: "Improper Privilege Management (CWE-269): Uncontrolled assignment of privileges or failure to drop privileges before executing high-risk system commands detected. Do not allow users to specify their own roles via request parameters, and always explicit set lowercase 'uid' / 'gid' when spawning child processes as root."
+    languages: [javascript]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-269']
+
+  - id: javascript-buffer-bounds-cwe119
+    pattern-either:
+      # Pattern 1: 捕捉使用已被廢棄且極度危險的 new Buffer(number) 直配堆外記憶體行為
+      - pattern: |
+          new Buffer($SIZE)
+
+      # Pattern 2: 捕捉分配未初始化記憶體的 Buffer.allocUnsafe，隨後缺乏邊界檢查的危險特徵
+      - pattern: |
+          Buffer.allocUnsafe($SIZE)
+
+      # Pattern 3: 捕捉 Buffer 幾何物件在進行底層數據 copy 時，完全缺失目標偏移量與長度參數的暴露特徵
+      - pattern: |
+          $BUF.copy($TARGET)
+
+    message: "Improper Restriction of Operations within the Bounds of a Memory Buffer (CWE-119): Unsafe Node.js Buffer operations detected. Avoid using 'new Buffer()' or 'Buffer.allocUnsafe()' which exposes raw uninitialized memory. Always use 'Buffer.alloc()' instead, and explicitly specify target offsets and lengths during buffer copy operations."
+    languages: [javascript]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-119']
+
+  - id: javascript-hardcoded-credentials-cwe798
+    pattern-either:
+      # Pattern 1: 只要字串內容完全吻合特定寫死的敏感憑證、密碼或 Token 常數值
+      - pattern: |
+          "SuperSecretNodePassword2026!"
+      - pattern: |
+          "sk_live_51NxjsJavaScriptToken"
+
+      # Pattern 2: 在物件初始化（Object Literal）中，直接將常數字串指定給名為 password 或 secret 的鍵值
+      - pattern: |
+          { ..., password: "...", ... }
+      - pattern: |
+          { ..., secret: "...", ... }
+
+      # Pattern 3: 呼叫連接或初始化方法時，參數直接內嵌包含敏感憑證特徵（如 connectionString）的字串
+      - pattern: |
+          $OBJ.connect("...password=...", ...)
+
+    message: "Use of Hard-coded Credentials (CWE-798): Hard-coded password, API key, or token detected in JavaScript source code. Store credentials securely using environment variables (process.env) or a secure secret management service."
+    languages: [javascript]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-798']
+
+  - id: javascript-integer-overflow-cwe190
+    pattern-either:
+      # Pattern 1: 捕捉將算術運算結果，直接丟進 32 位元強制轉型的位元左移運算（極易引發靜默翻轉）
+      - pattern: |
+          ($A * $B) << $SHIFT
+      - pattern: |
+          ($A + $B) << $SHIFT
+
+      # Pattern 2: 捕捉可能超出 MAX_SAFE_INTEGER 的乘法算術後，將結果直接傳給 Buffer.allocate / Array 的連續特徵
+      - pattern: |
+          $TOTAL = $COUNT * $SIZE;
+          ...
+          Buffer.alloc($TOTAL);
+
+    message: "Integer Overflow or Precision Loss (CWE-190): Unsafe arithmetic operation detected in JavaScript. Bitwise operators compress numbers into 32-bit integers, which can cause traditional wraparound. Large numbers exceeding Number.MAX_SAFE_INTEGER will lose precision. Use BigInt or validate bounds before allocating resources."
+    languages: [javascript]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-190']
+
+  - id: javascript-resource-consumption-cwe400
+    pattern-either:
+      # Pattern 1: 記憶體耗盡 — 直接將來自請求（req.body / req.query）的數值轉換後，直接指定給 Buffer.alloc 作為容量大小
+      - pattern: |
+          Buffer.alloc(parseInt(req.body.$VAR))
+      - pattern: |
+          Buffer.alloc(Number(req.query.$VAR))
+
+      # Pattern 2: 陣列大小耗盡 — 透過 new Array() 直接傳入未經過濾的外部數值進行大範圍記憶體空間配置
+      - pattern: |
+          new Array(parseInt(...))
+
+      # Pattern 3: CPU 耗盡 (Event Loop 阻塞) — 密集型迴圈的終止條件直接依賴於外部字串的 length 屬性，且內部執行同步操作
+      - pattern: |
+          for (let $I = 0; $I < req.body.$VAR.length; $I++) {
+              ...
+          }
+
+    message: "Uncontrolled Resource Consumption (CWE-400): Unbounded dynamic resource allocation or CPU-intensive operations detected in JavaScript. Always enforce a strict maximum threshold on input metrics (e.g., maximum string length, maximum buffer limit) before executing synchronous loops or dynamic memory allocations to prevent Event Loop denial of service (DoS)."
+    languages: [javascript]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-400']
+
+  - id: javascript-hidden-functionality-cwe912
+    pattern-either:
+      # Pattern 1: 捕捉硬編碼特定魔術字串進行身分繞過與特權提升的特徵
+      - pattern: |
+          if ($USER_INPUT === "admin_secret_pass")
+
+      # Pattern 2: 捕捉透過隱藏的請求欄位，直接將外部輸入送入 eval 執行的特徵
+      - pattern: |
+          eval(req.body.hidden_cmd)
+
+      # Pattern 3: 捕捉利用特定的隱藏 Header 或環境變數來秘密繞過正常認證流程的特徵
+      - pattern: |
+          if (req.headers["x-debug-override"] === process.env.BACKDOOR_KEY)
+
+    message: "Hidden Functionality / Backdoor (CWE-912): Detected suspicious hidden control paths, magic string checks, or backdoor command execution triggers in JavaScript. Remove unintended code or document all operational entry points thoroughly."
+    languages: [javascript, typescript]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-912']
+
+  - id: javascript-untrusted-inclusion-cwe829
+    pattern-either:
+      # Pattern 1: 捕捉下載遠端程式碼並直接送入 eval 執行的危險特徵
+      - pattern: |
+          eval((await axios.get($URL)).data)
+
+      # Pattern 2: 捕捉使用 require 動態加載外部指定名稱之未驗證模組的特徵
+      - pattern: |
+          require(req.query.moduleName)
+
+      # Pattern 3: 捕捉在執行環境中指定非安全（HTTP）的外部 npm registry 鏡像源特徵
+      - pattern: |
+          execSync("npm config set registry http://")
+
+    message: "Inclusion of Functionality from Untrusted Control Sphere (CWE-829): Code dynamically imports, downloads, or configures software execution from untrusted sources or unencrypted channels. Verify the integrity of external components, use HTTPS for package registries, and enforce a strict allowlist for dynamic imports."
+    languages: [javascript, typescript]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-829']
+
+  - id: javascript-weak-hash-cwe328
+    pattern-either:
+      # Pattern 1: 捕捉 Node.js 原生 crypto 模組中建立 MD5 雜湊的特徵
+      - pattern: |
+          crypto.createHash("md5")
+
+      # Pattern 2: 捕捉 Node.js 原生 crypto 模組中建立 SHA-1 雜湊的特徵
+      - pattern: |
+          crypto.createHash("sha1")
+
+      # Pattern 3: 捕捉第三方 CryptoJS 庫中直接呼叫過時 MD5 方法的特徵
+      - pattern: |
+          CryptoJS.MD5($INPUT)
+
+    message: "Use of Weak Hash (CWE-328): Recommending the use of broken or weak cryptographic hashes (MD5 or SHA-1) which are vulnerable to collision attacks. Upgrade to safer alternatives like SHA-256 or SHA-3 (e.g., crypto.createHash('sha256'))."
+    languages: [javascript, typescript]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-328']

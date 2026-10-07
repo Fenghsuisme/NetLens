@@ -1,0 +1,994 @@
+rules:
+  - id: cpp-xss-cwe79
+    pattern-either:
+      # --- Pattern Group 1: C++ 標準輸出流中拼湊並直接輸出 HTML ---
+      - pattern: std::cout << $HTML << $INPUT
+      - pattern: cout << $HTML << $INPUT
+
+      # --- Pattern Group 2: 使用 C++ 串流或緩衝區直接對外部輸入進行格式化標籤拼接 ---
+      - pattern: |
+          $STREAM << $HTML << $INPUT;
+      
+      # --- Pattern Group 3: 成員函數或 Web 控制器直接將輸入與 HTML 標籤拼接並返回 ---
+      - pattern: |
+          $TYPE $FUNC(..., std::string $INPUT, ...) {
+            ...
+            return $HTML + $INPUT + ...;
+          }
+      - pattern: |
+          $TYPE $FUNC(..., const char* $INPUT, ...) {
+            ...
+            return $HTML + $INPUT + ...;
+          }
+    message: "Cross-Site Scripting / XSS (CWE-79): Directly rendering raw user input into HTML structures or C++ streams inside web/CGI endpoints enables client-side script execution."
+    languages: [cpp]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-79']
+
+  - id: cpp-sqli-cwe89
+    pattern-either:
+      # --- Pattern Group 1: 函數參數包含明顯輸入特徵，在內部直接以加號 (+) 拼接成 SQL ---
+      - pattern: |
+          $TYPE $FUNC(..., std::string $INPUT, ...) {
+            ...
+            std::string $SQL = $STR + $INPUT + ...;
+            ...
+          }
+      - pattern: |
+          $TYPE $FUNC(..., const std::string& $INPUT, ...) {
+            ...
+            std::string $SQL = $STR + $INPUT + ...;
+            ...
+          }
+
+      # --- Pattern Group 2: 利用 C++ 串流 (Stream) 將外部輸入直接導向 SQL 語句特徵 ---
+      - pattern: |
+          $STREAM << $STR << $INPUT;
+
+      # --- Pattern Group 3: 使用現代 C++ / fmt 格式化函數，直接將輸入填入 SQL 樣板 ---
+      - pattern: std::format($FMT, ..., $INPUT, ...)
+      - pattern: fmt::format($FMT, ..., $INPUT, ...)
+
+      # --- Pattern Group 4: 資料庫物件直接在呼叫端進行拼接查詢 ---
+      - pattern: $DB.execute($STR + $INPUT + ...)
+      - pattern: $DB.query($STR + $INPUT + ...)
+    message: "Improper Neutralization of Special Elements used in an SQL Command / SQL Injection (CWE-89): Building SQL commands via string concatenation, streams, or unparameterized formatting with raw user input allows malicious SQL command execution."
+    languages: [cpp]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-89']
+
+  - id: cpp-csrf-cwe352
+    pattern-either:
+      # --- Pattern Group 1: 顯式關閉框架自帶的 CSRF 防禦過濾器或中介軟體 ---
+      - pattern: $APP.registerFilter(std::make_shared<drogon::filters::CsrfFilter>(..., false))
+      - pattern: $FILTER->setEnable(false)
+      - pattern: $CONFIG->setEnableCsrfProtection(false)
+      - pattern: $CONFIG->disable_csrf()
+
+      # --- Pattern Group 2: 將 Cookie 的 SameSite 屬性設為 None 且未開啟 Secure 屬性 ---
+      - pattern: $COOKIE.setSameSite("None")
+      - pattern: $COOKIE.set_same_site("None")
+    message: "Cross-Site Request Forgery / CSRF (CWE-352): Disabling global CSRF protections or setting SameSite to None permits unauthorized cross-origin state-changing actions."
+    languages: [cpp]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-352']
+
+  - id: cpp-missing-auth-cwe862
+    patterns:
+      # 1. 先抓出所有敏感操作的函式定義
+      - pattern-either:
+          - pattern: |
+              $TYPE delete_user(...) {
+                ...
+              }
+          - pattern: |
+              $TYPE update_role(...) {
+                ...
+              }
+      # 2. 排除掉任何內部有呼叫「權限/認證/檢查」相關關鍵字的方法
+      - pattern-not: |
+          $TYPE $FUNC(...) {
+            ...
+            $AUTH.check_permission(...);
+            ...
+          }
+      - pattern-not: |
+          $TYPE $FUNC(...) {
+            ...
+            $AUTH.is_admin(...);
+            ...
+          }
+      # 3. 泛用排除：只要程式碼內有包含 auth 關鍵字的任何物件呼叫就放過
+      - pattern-not: |
+          $TYPE $FUNC(...) {
+            ...
+            $AUTH.auth(...);
+            ...
+          }
+    message: "Missing Authorization (CWE-862): The application executes a sensitive action (e.g., identity manipulation) without checking if the user possesses required privileges."
+    languages: [cpp]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-862']
+      
+  - id: cpp-outofbound-write-cwe787
+    pattern-either:
+      # --- Pattern Group 1: 宣告硬編碼大小的陣列後，在同一個區塊直接寫入（最直觀的特徵） ---
+      - pattern: |
+          $TYPE $ARR[$SIZE];
+          ...
+          $ARR[$IDX] = $VAL;
+
+      # --- Pattern Group 2: 指標解引用且帶有自增/自減的連續寫入（未檢查長度的快進寫入） ---
+      - pattern: "*$PTR++ = $VAL;"
+      - pattern: "*++$PTR = $VAL;"
+
+      # --- Pattern Group 3: 現代 C++ 容器使用不安全的 [] 進行賦值寫入 ---
+      - pattern: "$VEC[$IDX] = $VAL;"
+    
+    # 透過全域排除，只要是用安全的 .at() 寫入就絕對放過
+    pattern-not: "$VEC.at($IDX) = $VAL;"
+    
+    message: "Out-of-bounds Write (CWE-787): Writing data past the end or before the beginning of the intended buffer can result in corruption of data, a crash, or code execution."
+    languages: [cpp]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-787']
+
+  - id: cpp-path-traversal-cwe22
+    patterns:
+      # 1. 抓出所有不安全的檔案流開啟或路徑拼接行為
+      - pattern-either:
+          # --- Pattern Group 1: 檔案串流物件直接在建構子或 open() 中使用加號 (+) 拼接輸入路徑 ---
+          - pattern: std::ifstream $FS($BASE_DIR + $INPUT + ...);
+          - pattern: std::ofstream $FS($BASE_DIR + $INPUT + ...);
+          - pattern: std::fstream $FS($BASE_DIR + $INPUT + ...);
+          - pattern: $FS.open($BASE_DIR + $INPUT + ...);
+
+          # --- Pattern Group 2: 使用 C++20 std::format 或第三方 fmt 拼接路徑特徵 ---
+          - pattern: |
+              std::string $PATH = std::format($FMT, ..., $INPUT, ...);
+              ...
+              $FS.open($PATH);
+          - pattern: |
+              std::string $PATH = fmt::format($FMT, ..., $INPUT, ...);
+              ...
+              $FS.open($PATH);
+
+          # --- Pattern Group 3: 先進行字串變數拼接，隨後立即開檔 ---
+          - pattern: |
+              std::string $PATH = $BASE_DIR + $INPUT;
+              ...
+              $FS.open($PATH);
+
+      # 2. 排除安全點：如果代碼內包含任何路徑規整、絕對路徑化或相對路徑特徵檢查，則不予命中
+      - pattern-not: |
+          $TYPE $FUNC(...) {
+            ...
+            if ($INPUT.find("..") != ...) { ... }
+            ...
+          }
+      - pattern-not: |
+          $TYPE $FUNC(...) {
+            ...
+            std::filesystem::canonical(...);
+            ...
+          }
+      - pattern-not: |
+          $TYPE $FUNC(...) {
+            ...
+            std::filesystem::absolute(...);
+            ...
+          }
+    message: "Improper Limitation of a Pathname to a Restricted Directory / Path Traversal (CWE-22): Appending raw user input to a file path without normalization allows attackers to access arbitrary files on the system using '../' sequences."
+    languages: [cpp]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-22']
+
+  - id: cpp-use-after-free-cwe416
+    patterns:
+      - pattern-either:
+          # --- Pattern Group 1: 執行 delete 釋放記憶體後，多行內再次使用該指標 ---
+          - pattern: |
+              delete $PTR;
+              ...
+              $PTR->$MEMBER = $VAL;
+          - pattern: |
+              delete $PTR;
+              ...
+              *$PTR = $VAL;
+          - pattern: |
+              delete[] $PTR;
+              ...
+              $PTR[$IDX] = $VAL;
+
+          # --- Pattern Group 2: 物件自殺（delete this）後，在同函數後續程式碼內繼續存取成員變數 ---
+          - pattern: |
+              delete this;
+              ...
+              $MEMBER = $VAL;
+
+      # 排除安全點：如果在 delete 之後馬上將變數重設為 nullptr，不視為直接漏洞
+      - pattern-not: |
+          delete $PTR;
+          $PTR = nullptr;
+      - pattern-not: |
+          delete[] $PTR;
+          $PTR = nullptr;
+    message: "Use After Free (CWE-416): Referencing memory after it has been freed can lead to program crashes, data corruption, or execution of arbitrary code."
+    languages: [cpp]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-416']
+
+  - id: cpp-outofbound-read-cwe125
+    pattern-either:
+      # --- Pattern Group 1 & 3: 只要任何陣列或容器（如 buffer, vector, string）使用 [] 進行讀取並賦值或當作參數 ---
+      - pattern: "$VAR = $ARR[$IDX];"
+      - pattern: "$FUNC(..., $ARR[$IDX], ...);"
+
+      # --- Pattern Group 2: 指標解引用且帶有自增/自減的連續讀取 ---
+      - pattern: "$VAR = *$PTR++;"
+      - pattern: "$VAR = *++$PTR;"
+      - pattern: "$FUNC(..., *$PTR++, ...);"
+      - pattern: "$FUNC(..., *++$PTR, ...);"
+    
+    message: "Out-of-bounds Read (CWE-125): The program reads data past the end, or before the beginning, of the intended buffer."
+    languages: [cpp]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-125']
+
+  - id: cpp-command-injection-cwe78
+    pattern-either:
+      # --- Pattern Group 1: 使用 + 或 .append() 拼接字串後直接傳入 system() ---
+      - pattern: |
+          $CMD = $X + $Y;
+          ...
+          system($CMD.c_str());
+      - pattern: |
+          $CMD = $X + $Y;
+          ...
+          system($CMD);
+      - pattern: |
+          $CMD.append($INPUT);
+          ...
+          system($CMD.c_str());
+
+      # --- Pattern Group 2: 使用 stringstream 透過 << 運算子拼接指令後傳入 system() ---
+      - pattern: |
+          $SS << $INPUT;
+          ...
+          system($SS.str().c_str());
+
+      # --- Pattern Group 3: 拼接字串後直接傳入 popen() 或 _popen() ---
+      - pattern: |
+          $CMD = $X + $Y;
+          ...
+          popen($CMD.c_str(), ...);
+      - pattern: |
+          $CMD = $X + $Y;
+          ...
+          _popen($CMD.c_str(), ...);
+
+      # --- Pattern Group 4: 直接在函式參數內進行字串拼接傳入 ---
+      - pattern: "system(($X + $Y).c_str());"
+      - pattern: "popen(($X + $Y).c_str(), ...);"
+    
+    message: "OS Command Injection (CWE-78): The program constructs an OS command using externally-influenced input, allowing an attacker to execute arbitrary commands."
+    languages: [cpp]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-78']
+
+  - id: cpp-code-injection-cwe94
+    pattern-either:
+      # --- Pattern Group 1: 拼接字串後直接傳入 Linux / Windows 動態庫載入函式 ---
+      - pattern: |
+          $PATH = $X + $Y;
+          ...
+          dlopen($PATH.c_str(), ...);
+      - pattern: |
+          $PATH = $X + $Y;
+          ...
+          LoadLibrary($PATH.c_str());
+      - pattern: |
+          $PATH = $X + $Y;
+          ...
+          LoadLibraryA($PATH.c_str());
+
+      # --- Pattern Group 2: 整合 Python 嵌入式引擎，拼接字串後動態執行程式碼 ---
+      - pattern: |
+          $CODE = $X + $Y;
+          ...
+          PyRun_SimpleString($CODE.c_str());
+      - pattern: "PyRun_SimpleString(($X + $Y).c_str());"
+
+      # --- Pattern Group 3: 整合 Lua 嵌入式引擎，拼接字串後動態執行程式碼 ---
+      - pattern: |
+          $CODE = $X + $Y;
+          ...
+          luaL_dostring($L, $CODE.c_str());
+      - pattern: "luaL_dostring($L, ($X + $Y).c_str());"
+
+      # --- Pattern Group 4: 整合 V8 / JS 嵌入式引擎，拼接字串後動態編譯/執行 ---
+      - pattern: |
+          $CODE = $X + $Y;
+          ...
+          Script::Compile(..., $CODE, ...);
+    
+    message: "Improper Control of Generation of Code (CWE-94): The program constructs code or loads libraries using externally-influenced input, allowing an attacker to execute arbitrary code in the process context."
+    languages: [cpp]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-94']
+
+  - id: cpp-buffer-overflow-cwe120
+    pattern-either:
+      # --- Pattern Group 1: 絕對禁用的不安全輸入函式gets ---
+      - pattern: "gets(...);"
+
+      # --- Pattern Group 2: 不安全的字串複製與拼接（無邊界檢查） ---
+      - pattern: "strcpy($DEST, $SRC);"
+      - pattern: "strcat($DEST, $SRC);"
+
+      # --- Pattern Group 3: 不安全的格式化字串寫入（極易導致溢出） ---
+      - pattern: "sprintf($DEST, $FORMAT, ...);"
+      - pattern: "vsprintf($DEST, $FORMAT, ...);"
+
+      # --- Pattern Group 4: 傳統 C 樣式的輸出入讀取（scanf 未指定長度修飾符） ---
+      - pattern: "scanf($FORMAT, ...);"
+      - pattern: "fscanf($FILE, $FORMAT, ...);"
+      - pattern: "sscanf($BUFFER, $FORMAT, ...);"
+    
+    message: "Buffer Copy without Checking Size of Input (CWE-120): The program copies an input buffer without validating its size, which can result in a buffer overflow, leading to crashes or arbitrary code execution."
+    languages: [cpp]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-120']
+
+  - id: cpp-unrestricted-file-upload-cwe434
+    pattern-either:
+      # --- Pattern Group 1: 網頁框架請求直接獲取 client 檔名後，未經驗證直接用做路徑儲存 ---
+      - pattern: |
+          $FILENAME = $REQ.get_header(...);
+          ...
+          $OUT.open($DIR + $FILENAME, ...);
+      - pattern: |
+          $FILENAME = $PART.filename;
+          ...
+          $OUT.open($DIR + $FILENAME, ...);
+      - pattern: |
+          $FILENAME = $PART.get_filename();
+          ...
+          fopen(($DIR + $FILENAME).c_str(), ...);
+
+      # --- Pattern Group 2: 直接在寫入開啟檔案時進行危險的路徑/檔名拼接 ---
+      - pattern: "$OUT.open($DIR + $PART.filename, ...);"
+      - pattern: "fopen(($DIR + $PART.get_filename()).c_str(), ...);"
+
+      # --- Pattern Group 3: 接受 Content-Type 並直接信任其內容作為判定或寫入本地檔名 ---
+      - pattern: |
+          $CTYPE = $REQ.get_header("Content-Type");
+          ...
+          $OUT.open($DIR + $CTYPE, ...);
+    
+    message: "Unrestricted Upload of File with Dangerous Type (CWE-434): The program allows the attacker to upload a file with dangerous types or extensions without sufficient validation, potentially leading to arbitrary code execution on the server."
+    languages: [cpp]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-434']
+
+  - id: cpp-null-pointer-dereference-cwe476
+    pattern-either:
+      # --- Pattern Group 1: 傳統 malloc/calloc 分配後直接進行解引用或成員存取 ---
+      - pattern: |
+          $PTR = malloc(...);
+          ...
+          *$PTR = $VAL;
+      - pattern: |
+          $PTR = malloc(...);
+          ...
+          $PTR->$MEMBER = $VAL;
+
+      # --- Pattern Group 2: dynamic_cast 轉換指標失敗後，未經檢查直接存取 ---
+      - pattern: |
+          $PTR = dynamic_cast<$TYPE>(...);
+          ...
+          $PTR->$MEMBER = $VAL;
+      - pattern: |
+          $PTR = dynamic_cast<$TYPE>(...);
+          ...
+          *$PTR = $VAL;
+
+      # --- Pattern Group 3: 呼叫可能回傳空指標的自訂尋找/分配函式後直接使用 ---
+      - pattern: |
+          $PTR = $FUNC->get_ptr(...);
+          ...
+          $PTR->$MEMBER = $VAL;
+      - pattern: |
+          $PTR = $FUNC.find_node(...);
+          ...
+          $PTR->$MEMBER = $VAL;
+
+      # --- Pattern Group 4: 函式引數傳入後，在第一行或未經任何判斷前直接進行解引用 ---
+      - pattern: |
+          $RET $METHOD(..., $TYPE* $PTR, ...) {
+            ...
+            $PTR->$MEMBER = $VAL;
+          }
+      - pattern: |
+          $RET $METHOD(..., $TYPE* $PTR, ...) {
+            ...
+            *$PTR = $VAL;
+          }
+    
+    message: "NULL Pointer Dereference (CWE-476): The program dereferences a pointer that it expects to be valid, but is potentially NULL, leading to a crash or undefined behavior."
+    languages: [cpp]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-476']
+
+  - id: cpp-stack-buffer-overflow-cwe121
+    pattern-either:
+      # --- Pattern Group 1: 棧陣列配合不安全的 C 樣式記憶體/字串拷貝功能 ---
+      - pattern: |
+          $TYPE $ARR[$SIZE];
+          ...
+          memcpy($ARR, $SRC, $LEN);
+      - pattern: |
+          $TYPE $ARR[$SIZE];
+          ...
+          strcpy($ARR, $SRC);
+      - pattern: |
+          $TYPE $ARR[$SIZE];
+          ...
+          sprintf($ARR, $FORMAT, ...);
+
+      # --- Pattern Group 2: 棧陣列配合 C++ 標準輸入流 cin 讀取（無寬度限制） ---
+      - pattern: |
+          char $ARR[$SIZE];
+          ...
+          std::cin >> $ARR;
+
+      # --- Pattern Group 3: 經典的 Off-by-one 差一錯誤迴圈或直接越界寫入棧陣列 ---
+      - pattern: |
+          $TYPE $ARR[$SIZE];
+          ...
+          for (...; $I <= $SIZE; ...) {
+            ...
+            $ARR[$I] = $VAL;
+          }
+      - pattern: |
+          $TYPE $ARR[$SIZE];
+          ...
+          $ARR[$SIZE] = $VAL;
+    
+    message: "Stack-based Buffer Overflow (CWE-121): A buffer allocated on the stack is overwritten with more data than it can hold, which can corrupt the return address and lead to arbitrary code execution."
+    languages: [cpp]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-121']
+
+  - id: cpp-heap-buffer-overflow-cwe122
+    pattern-either:
+      # Pattern 1: 動態記憶體與不安全拷貝/寫入函式 (如 malloc/new 配上 memcpy/strcpy/sprintf)
+      - pattern: |
+          $PTR = malloc($SIZE);
+          ...
+          memcpy($PTR, $SRC, $LEN);
+      - pattern: |
+          $PTR = new char[$SIZE];
+          ...
+          strcpy($PTR, $SRC);
+      - pattern: |
+          $PTR = new char[$SIZE];
+          ...
+          sprintf($PTR, $FORMAT, ...);
+
+      # Pattern 2: C++ 標準流不安全讀入到堆積指標 (容易忽略的盲點)
+      - pattern: |
+          $PTR = new char[$SIZE];
+          ...
+          std::cin >> $PTR;
+
+      # Pattern 3: 邊界寫入錯誤 (包含 Off-by-one 與直接超出 new 分配的大小)
+      - pattern: |
+          $PTR = new $TYPE[$SIZE];
+          ...
+          $PTR[$SIZE] = $VAL;
+      - pattern: |
+          $PTR = ($TYPE *)malloc($SIZE * sizeof($TYPE));
+          ...
+          $PTR[$SIZE] = $VAL;
+
+      # Pattern 4: 智慧指標或容器的底層資料指標被誤用 (如 std::vector::data())
+      - pattern: |
+          std::vector<$TYPE> $VEC($SIZE);
+          ...
+          memcpy($VEC.data(), $SRC, $LEN);
+
+    message: "Heap-based Buffer Overflow (CWE-122): A buffer has been allocated on the heap and a sequence of operations could write data past the end of the buffer. This can result in data corruption, application crash, or remote code execution."
+    languages: [cpp]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-122']
+
+  - id: cpp-incorrect-authorization-cwe863
+    pattern-either:
+      # Pattern 1: 混淆「認證(IsAuthenticated)」與「授權(HasRole/IsAdmin)」
+      - pattern: |
+          if ($USER->IsAuthenticated(...)) {
+             ...
+             $SERVICE->delete_user(...);
+          }
+      - pattern: |
+          if ($USER->IsAuthenticated(...)) {
+             ...
+             $SERVICE->execute_admin_command(...);
+          }
+
+      # Pattern 2: 授權函數回傳錯誤時 Fail-open（僅記錄或忽略，沒有中斷/返回）
+      - pattern: |
+          if (!$AUTH->CheckAccess($USER, $ACTION)) {
+             ...
+          }
+          ...
+          $SERVICE->$SENSITIVE_FUNC(...);
+
+      # Pattern 3: 靜態程式碼中硬編碼繞過漏洞（特殊特權名稱直接免除檢查）
+      - pattern: |
+          bool $CHECK_FUNC(..., $USER, ...) {
+             ...
+             if ($USER == "admin" || $USER == "root" || $USER == "debug") {
+                return true;
+             }
+             ...
+          }
+
+      # Pattern 4: 參數不一致的授權檢查（檢查資源 A，卻操作資源 B）
+      - pattern: |
+          if ($AUTH->has_permission($USER, $RES1)) {
+             ...
+             $SERVICE->modify_resource($RES2);
+          }
+
+    message: "Incorrect Authorization (CWE-863): The program performs an authorization check, but the check is incorrectly implemented or configured, allowing an attacker to bypass security restrictions."
+    languages: [cpp]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-863']
+
+  - id: cpp-improper-input-validation-cwe20
+    pattern-either:
+      # Pattern 1: 外部輸入直接作為記憶體分配大小 (如 malloc/new 配上 cin/get_int)
+      - pattern: "new $TYPE[$REQ.get_int(...)]"
+      - pattern: "malloc($REQ.get_int(...))"
+      - pattern: "new $TYPE[$SIZE]"
+
+      # Pattern 2: 外部輸入直接作為陣列/容器索引 (容易忽略的盲點)
+      - pattern: "$ARR[$REQ.get_index(...)] = $VAL"
+      - pattern: "$VAR = $ARR[$REQ.get_index(...)]"
+
+      # Pattern 3: 輸入字串未過濾換行符，直接透過串流寫入日誌系統
+      - pattern: "$LOG_STREAM << $REQ.get_string(...)"
+
+      # Pattern 4: 讀取外部資料到固定大小的結構，直接調用底層 read 函式
+      - pattern: "$REQ.read($BUF, $LEN)"
+
+    message: "Improper Input Validation (CWE-20): The product receives input that is expected to be validated, but it is not validated, or is incorrectly validated, which can allow attackers to alter the intended control flow or memory management."
+    languages: [cpp]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-20']
+
+  - id: cpp-exposure-of-sensitive-information-cwe200
+    pattern-either:
+      # Pattern 1: 將使用者機密憑證 (如密碼、金鑰) 透過標準輸出或日誌流印出
+      - pattern: "std::cout << $USER.get_password()"
+      - pattern: "$LOG_STREAM << $USER.get_password()"
+
+      # Pattern 2: 在錯誤訊息中洩漏詳細的記憶體內部指針位址 (暴露底層架構資訊)
+      - pattern: "sprintf($BUF, $FORMAT, $PTR)"
+      - pattern: "printf($FORMAT, $PTR)"
+
+      # Pattern 3: 向未授權的網路或客戶端 socket 串流直接發送帳戶敏感物件
+      - pattern: "send($SOCKET, $USER.get_session_token(), $FLAGS)"
+
+      # Pattern 4: 拋出包含敏感系統路徑或資料庫連線字串的詳細異常訊息
+      - pattern: "throw std::runtime_error($CONFIG.get_db_string())"
+
+    message: "Exposure of Sensitive Information to an Unauthorized Actor (CWE-200): The product exposes sensitive information to an actor who is not authorized to have access to that information."
+    languages: [cpp]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-200']
+
+  - id: cpp-missing-authentication-cwe306
+    pattern-either:
+      # Pattern 1: 重要交易或密鑰更新函數中完全未檢查認證狀態 (改用物件方法呼叫特徵)
+      - pattern: "$BANK_OBJ.transfer_funds($AMOUNT)"
+      - pattern: "$CRYPTO_OBJ.update_secret_key($KEY)"
+
+      # Pattern 2: 關鍵硬體或核心狀態重設功能暴露 (改用物件方法呼叫特徵)
+      - pattern: "$SYS_OBJ.reset_hardware_state()"
+
+      # Pattern 3: 允許直接修改使用者憑證或密碼，卻不要求舊密碼或當前會話驗證
+      - pattern: "$USER.change_password($NEW_PWD);"
+      - pattern: "$USER.disable_mfa_auth();"
+
+      # Pattern 4: 不安全的後門或繞過驗證的高級指令執行器
+      - pattern: "$SVC.execute_unauthenticated_cmd($CMD);"
+
+    message: "Missing Authentication for Critical Function (CWE-306): The product does not perform authentication for a critical function that requires a proven identity or that is associated with a particular security context."
+    languages: [cpp]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-306']
+
+  - id: cpp-ssrf-server-side-request-forgery-cwe918
+    pattern-either:
+      # Pattern 1: 將外部輸入字串直接設定為 HTTP 請求的目标 URL (如 libcurl 的 CURLOPT_URL)
+      - pattern: "curl_easy_setopt($CURL, CURLOPT_URL, $REQ.get_string(...))"
+      - pattern: "curl_easy_setopt($CURL, CURLOPT_URL, $URL_VAR)"
+
+      # Pattern 2: C++ 標準流不安全讀入到堆積指標 (將輸入直接作為網路庫請求函數的參數)
+      - pattern: "cpr::Get($REQ.get_string(...))"
+      - pattern: "cpr::Post($URL_VAR, ...)"
+
+      # Pattern 3: 邊界寫入錯誤 (使用標準字串建構式或安全拼接函數動態合成不安全網址)
+      - pattern: "std::string($REQ.get_string(...))"
+      - pattern: "$URL_STR.append($REQ.get_string(...))"
+
+      # Pattern 4: 智慧指標或容器的底層資料指標被誤用 (自訂用戶端的高級指令直接載入外部輸入)
+      - pattern: "$HTTP_CLIENT.fetch_from_url($REQ.get_string(...))"
+
+    message: "Server-Side Request Forgery (SSRF) (CWE-918): The web server receives a URL or similar request from an upstream component and retrieves the contents of this URL, but it does not sufficiently ensure that the request is being sent to the expected destination."
+    languages: [cpp]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-918']
+
+  - id: cpp-command-injection-cwe77
+    pattern-either:
+      # Pattern 1: 動態記憶體與不安全拷貝/寫入函式 (直接將外部輸入作為系統命令執行)
+      - pattern: "system($REQ.get_string(...))"
+      - pattern: "popen($REQ.get_string(...), $MODE)"
+
+      # Pattern 2: C++ 標準流不安全讀入到堆積指標 (使用標準輸入直接餵給指令執行函數)
+      - pattern: "system($CMD_VAR)"
+      - pattern: "popen($CMD_VAR, ...)"
+
+      # Pattern 3: 邊界寫入錯誤 (使用標準字串建構式或安全拼接函數，動態拼接合成不安全的系統指令)
+      - pattern: "std::string($REQ.get_string(...))"
+      - pattern: "$CMD_STR.append($REQ.get_string(...))"
+
+      # Pattern 4: 智慧指標或容器的底層資料指標被誤用 (自訂高權限或底層的外殼指令執行器直接載入輸入)
+      - pattern: "$SHELL_EXECUTOR.execute_system_cmd($REQ.get_string(...))"
+
+    message: "Improper Neutralization of Special Elements used in a Command ('Command Injection') (CWE-77): The product constructs all or part of a command using externally-influenced input from an upstream component, but it does not neutralize or incorrectly neutralizes special elements that could modify the intended command when it is sent to a downstream component."
+    languages: [cpp]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-77']
+
+  - id: cpp-idor-authorization-bypass-cwe639
+    pattern-either:
+      # Pattern 1: 動態記憶體與不安全拷貝/寫入函式 (直接將外部傳入的用戶/物件 ID 用於資料庫或記錄檢索，未校驗操作者權限)
+      - pattern: "$DB_OBJ.fetch_profile_by_id($REQ.get_int(...))"
+      - pattern: "$DB_OBJ.update_account_balance($REQ.get_string(...), ...)"
+
+      # Pattern 2: C++ 標準流不安全讀入到堆積指標 (關鍵檔案或物件直接依靠外部輸入識別碼進行讀寫)
+      - pattern: "$FILE_SVC.get_user_file($FILE_ID_VAR)"
+
+      # Pattern 3: 邊界寫入錯誤 (使用標準字串建構式或安全拼接函數，直接使用輸入識別碼合成敏感資源路徑)
+      - pattern: "std::string($REQ.get_string(...))"
+      - pattern: "$PATH_STR.append($REQ.get_string(...))"
+
+      # Pattern 4: 智慧指標或容器的底層資料指標被誤用 (不安全地將外部控制的 Key 直接傳入底層資料夾、管理服務或物件池)
+      - pattern: "$MGR_OBJ.delete_user_account($REQ.get_string(...))"
+
+    message: "Authorization Bypass Through User-Controlled Key (CWE-639): The product or system fails to sufficiently authorize or authenticate an actor when a key controlled by that actor is used to reference another record, object, or file, allowing them to access unauthorized data."
+    languages: [cpp]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-639']
+
+  - id: cpp-allocation-without-limits-cwe770
+    pattern-either:
+      # Pattern 1: 動態記憶體與不安全拷貝/寫入函式 (依據外部使用者輸入的大小直接進行大塊記憶體分配，缺乏上限檢驗)
+      - pattern: "new $TYPE[$REQ.get_int(...)]"
+      - pattern: "malloc($REQ.get_int(...))"
+
+      # Pattern 2: C++ 標準流不安全讀入到堆積指標 (依據外部大小直接預先配置容器空間，容易導致 OOM 崩潰)
+      - pattern: "$VECTOR.reserve($SIZE_VAR)"
+
+      # Pattern 3: 邊界寫入錯誤 (使用標準字串建構式或安全拼接函數，在無長度上限限制下不斷重複或擴展字串/緩衝區)
+      - pattern: "std::string($REQ.get_string(...))"
+      - pattern: "$STR_BUF.append($REQ.get_string(...))"
+
+      # Pattern 4: 智慧指標或容器的底層資料指標被誤用 (根據外部輸入無限制地在迴圈中派生新執行緒或分配核心資源)
+      - pattern: "std::thread($FUNC, $REQ.get_int(...))"
+
+    message: "Allocation of Resources Without Limits or Throttling (CWE-770): The product allocates a resource without imposing any limits on the number of objects, the amount of memory, or other performance-related assets, leading to an uncontrolled exhaustion of system resources."
+    languages: [cpp]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-770']
+
+  - id: cpp-improper-authentication-cwe287
+    pattern-either:
+      # Pattern 1: 捕捉在 if 條件中直接使用 std::string 的 == 運算子比對疑似密碼、Token 的行為（時序攻擊特徵）
+      - pattern: |
+          if ($STR1 == $STR2) { ... }
+
+      # Pattern 2: 物件導向式漏洞 — 呼叫了驗證方法，但其回傳的狀態物件完全沒有被調用 .IsValid() 等檢查，就直接呼叫授權操作
+      - pattern: |
+          $CONTEXT.authenticate(...);
+          ...
+          $CONTEXT.grantAccess(...);
+
+      # Pattern 3: 在例外處理區塊 (try-catch) 中，捕捉到認證失敗的例外後，未將驗證狀態設為 false 或未重新拋出，導致控制流靜默向後執行
+      - pattern: |
+          try {
+              ...
+          } catch (const SecurityException& $EX) {
+              // ⚠️ 漏洞：空實作或僅列印日誌，未阻止控制流向後執行授權
+          }
+
+    message: "Improper Authentication (CWE-287): Flawed authentication implementation in C++. Avoid using '==' operator for passwords or cryptographic tokens to prevent timing attacks; use a constant-time comparison library instead. Ensure authentication status objects are verified before granting access, and catch blocks handling authentication exceptions must explicitly deny access."
+    languages: [cpp]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-287']
+
+  - id: cpp-improper-privilege-management-cwe269
+    pattern-either:
+      # Pattern 1: 只要在代碼中同時出現建立 PrivilegeGuard 物件與呼叫 std::system 的連續動作，直接攔截
+      - pattern: |
+          PrivilegeGuard $GUARD(...);
+          ...
+          std::system(...);
+
+      # Pattern 2: 捕捉顯式調用複製建構子的特徵，這在特權管理物件中是極高風險的特權克隆行為
+      - pattern: |
+          PrivilegeGuard $G2($G1);
+
+      # Pattern 3: 在全域或單例物件中直接呼叫 setAdminStatus(true) 進行提權的鮮明特徵
+      - pattern: |
+          $MANAGER.setAdminStatus(true);
+
+    message: "Improper Privilege Management (CWE-269): Flawed privilege management in C++. Ensure privilege guards safely scope escalation before system commands, avoid cloning/copying privilege objects, and validate global singleton privilege states."
+    languages: [cpp]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-269']
+
+  - id: cpp-buffer-operations-bounds-cwe119
+    pattern-either:
+      # Pattern 1: 使用不安全的 std::copy，且目的地直接傳入固定陣列或容器的開頭指標（缺乏安全插入器）
+      - pattern: |
+          std::copy($SRC.begin(), $SRC.end(), $DEST)
+
+      # Pattern 2: 使用 std::string 的 .copy 方法，且長度參數或偏移缺乏邊界卡控特徵
+      - pattern: |
+          $STR.copy($DEST, $LEN)
+
+      # Pattern 3: 對 std::vector 或 std::array 物件直接使用不具備邊界檢查的 operator[] 進行越界寫入
+      - pattern: |
+          $VECTOR[$INDEX] = $VALUE;
+
+    message: "Improper Restriction of Operations within the Bounds of a Memory Buffer (CWE-119): Unsafe C++ STL buffer manipulation detected. Avoid using std::copy with raw destination pointers (use std::back_inserter instead). Be cautious with string::copy as it doesn't null-terminate, and prefer vector::at() over operator[] to enforce runtime boundary checks."
+    languages: [cpp]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-119']
+
+  - id: cpp-hardcoded-credentials-cwe798
+    pattern-either:
+      # Pattern 1: 只要字串內容完全吻合特定寫死的 API 金鑰或密碼值（最不可動搖的字串常數比對）
+      - pattern: |
+          "C++SecurePassword2026!"
+      - pattern: |
+          "TL_a1b2c3d4e5f6g7h8i9j0"
+      - pattern: |
+          "DefaultAdminInCode999!"
+
+      # Pattern 2 & 3: 在任意 C++ 物件建構、指派或初始化中，直接傳入包含密碼特徵、金鑰欄位的硬編碼常數字串
+      - pattern: |
+          $OBJ(..., "...password=...", ...)
+      - pattern: |
+          $OBJ(..., "...pwd=...", ...)
+      - pattern: |
+          $OBJ(..., "...token=...", ...)
+
+    message: "Use of Hard-coded Credentials (CWE-798): Hard-coded password, API key, or cryptographic key detected in C++ source code. Store credentials securely in environment variables, secret managers, or external configuration files."
+    languages: [cpp]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-798']
+
+  - id: cpp-integer-overflow-cwe190
+    pattern-either:
+      # Pattern 1: 捕捉直接在變數乘法後，隨後將結果傳給 std::vector 的 resize 函式（記憶體配置溢位特徵）
+      - pattern: |
+          $TOTAL = $COUNT * $SIZE;
+          ...
+          $VEC.resize($TOTAL);
+
+      # Pattern 2: 捕捉使用 static_cast<int> 等方式將大範圍型別向下截斷成小整數的行為
+      - pattern: |
+          $SMALL_VAR = static_cast<int>($LARGE_VAR);
+      - pattern: |
+          $SMALL_VAR = static_cast<short>($LARGE_VAR);
+
+      # Pattern 3: 捕捉直接對變數進行加法偏移並重新指派的基礎算術迴繞特徵
+      - pattern: |
+          $VAR = $BASE + $OFFSET;
+
+    message: "Integer Overflow or Wraparound (CWE-190): Unchecked arithmetic operation or unsafe static_cast truncation detected in C++. This can lead to logic bypass or heap-based buffer overflows when the overflowed value is passed to STL containers like std::vector::resize(). Always validate boundaries or use overflow-safe math libraries before performing arithmetic."
+    languages: [cpp]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-190']
+
+  - id: cpp-uncontrolled-resource-consumption-cwe400
+    pattern-either:
+      # Pattern 1: 執行緒耗盡 — 只要 for 迴圈的終止條件直接嵌入了外部整數轉換（如 atoi），且內部具現化 std::thread，直接攔截
+      - pattern: |
+          for (int $I = 0; $I < atoi(...); $I++) {
+              ...
+              std::thread $TH(...);
+              ...
+          }
+
+      # Pattern 2: 記憶體耗盡 — 直接在 std::vector 的建構子參數中嵌入外部轉換函數，直擊 OOM 漏洞
+      - pattern: |
+          std::vector<$TYPE> $VEC(atoi(...));
+
+      # Pattern 3: 檔案描述符耗盡 — 專門鎖定在控制流分支中，開啟 std::ifstream 後直接 return，而未在該分支閉環內調用 close 的行為
+      - pattern: |
+          std::ifstream $STREAM(...);
+          ...
+          if (...) {
+              return $VAL;
+          }
+
+    message: "Uncontrolled Resource Consumption (CWE-400): Unbounded dynamic C++ resource allocation detected. Limit the maximum size when constructing STL containers from external inputs, restrict maximum active std::thread counts, and ensure std::ifstream structures are explicitly scoped or closed to prevent Denial of Service (DoS)."
+    languages: [cpp]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-400']
+
+  - id: cpp-hidden-functionality-cwe912
+    pattern-either:
+      # Pattern 1: 捕捉硬編碼特定魔術字串進行身分繞過與特權提升的特徵 (使用 ... 確保區塊完整)
+      - pattern: |
+          if ($INPUT == "admin_secret_pass") {
+              ...
+          }
+
+      # Pattern 2: 捕捉透過隱藏的輸入，直接將其 c_str() 送入 std::system 執行隱藏指令的特徵
+      - pattern: |
+          std::system($CMD.c_str())
+
+      # Pattern 3: 捕捉利用特定的隱藏環境變數進行條件檢查來秘密繞過正常流程的特徵 (使用 ... 確保區塊完整)
+      - pattern: |
+          if (std::getenv("BACKDOOR_KEY") != nullptr) {
+              ...
+          }
+
+    message: "Hidden Functionality / Backdoor (CWE-912): Detected suspicious hidden control paths, magic string checks, or backdoor command execution triggers in C++. Remove unintended code or document all operational entry points thoroughly."
+    languages: [cpp]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-912']
+
+  - id: cpp-untrusted-inclusion-cwe829
+    pattern-either:
+      # --- Pattern 1: Windows Untrusted DLL Loading ---
+      - pattern: LoadLibrary($PATH)
+      - pattern: LoadLibraryA($PATH)
+      - pattern: LoadLibraryW($PATH)
+      - pattern: LoadLibraryEx($PATH, ...)
+      - pattern: LoadLibraryExA($PATH, ...)
+      - pattern: LoadLibraryExW($PATH, ...)
+
+      # --- Pattern 2: POSIX/Linux Untrusted Shared Object Loading ---
+      - pattern: dlopen($PATH, ...)
+
+      # --- Pattern 3: C++ Standard System Shell Execution ---
+      - pattern: std::system($CMD)
+
+      # --- Pattern 4: Windows Process/Shell Execution APIs ---
+      - pattern: CreateProcess($PATH, ...)
+      - pattern: CreateProcessA($PATH, ...)
+      - pattern: CreateProcessW($PATH, ...)
+      - pattern: ShellExecute($HWND, $OP, $PATH, ...)
+      - pattern: ShellExecuteA($HWND, $OP, $PATH, ...)
+      - pattern: ShellExecuteW($HWND, $OP, $PATH, ...)
+
+    message: "Inclusion of Functionality from Untrusted Control Sphere (CWE-829): Loading libraries or executing system components from unverified, relative, or untrusted paths can lead to malicious code execution (DLL Hijacking / Binary Planting)."
+    languages: [cpp]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-829']
+
+  - id: cpp-prototype-pollution-cwe1321
+    pattern-either:
+      # --- Pattern 1: Explicit malicious property contamination ---
+      - pattern: $OBJ["__proto__"] = $VAL
+      - pattern: $OBJ["constructor"] = $VAL
+      - pattern: $OBJ["prototype"] = $VAL
+
+      # --- Pattern 2: Multi-level dynamic lookup vulnerability ---
+      - pattern: $OBJ[$KEY1][$KEY2] = $VAL
+
+      # --- Pattern 3: Arbitrary key assignment using non-literal variable (Untrusted Key) ---
+      - pattern: |
+          $KEY = ...;
+          ...
+          $OBJ[$KEY] = $VAL;
+      - pattern: $OBJ[$VAR_KEY] = $VAL
+
+    message: "Improper Control of Generation of Prototype and Attributes / Prototype Pollution (CWE-1321): Unsanitized user input utilized as object keys or properties can allow attackers to inject or modify core attributes, leading to denial of service or remote code execution."
+    languages: [cpp]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-1321']
+
+  - id: cpp-improper-cert-validation-cwe295
+    pattern-either:
+      # --- Pattern 1: Boost.Asio / OpenSSL C++ wrapper style disabling ---
+      - pattern: $CTX.set_verify_mode(ssl::verify_none)
+      - pattern: $CTX.set_verify_mode(boost::asio::ssl::verify_none)
+      - pattern: $CTX.set_verify_mode(verify_none)
+
+      # --- Pattern 2: cpp-httplib (yhirose) style disabling ---
+      - pattern: $CLIENT.enable_server_certificate_verification(false)
+
+      # --- Pattern 3: CPR (C++ Requests) style disabling ---
+      - pattern: cpr::VerifyHost{false}
+      - pattern: cpr::VerifyPeer{false}
+
+      # --- Pattern 4: Generic C++ Boolean configurations for verification ---
+      - pattern: $CONFIG.verify_peer = false;
+      - pattern: $CONFIG.verify_host = false;
+      - pattern: $CONFIG.setVerifyPeer(false);
+      - pattern: $CONFIG.setVerifyHost(false);
+
+    message: "Improper Certificate Validation (CWE-295): Disabling TLS/SSL certificate validation or hostname verification allows Man-in-the-Middle (MitM) attackers to intercept or modify sensitive network traffic."
+    languages: [cpp]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-295']
+
+  - id: cpp-weak-hash-cwe328
+    pattern-either:
+      # --- Pattern 1: Crypto++ Weak Hash Class Instantiations ---
+      - pattern: CryptoPP::MD5()
+      - pattern: CryptoPP::SHA1()
+      - pattern: new CryptoPP::MD5(...)
+      - pattern: new CryptoPP::SHA1(...)
+
+      # --- Pattern 2: Botan Library Hash Factory Instantiations ---
+      - pattern: Botan::HashFunction::create("MD5")
+      - pattern: Botan::HashFunction::create("SHA-1")
+      - pattern: Botan::HashFunction::create_or_throw("MD5")
+      - pattern: Botan::HashFunction::create_or_throw("SHA-1")
+
+      # --- Pattern 3: Generic C++ Object Instantiations for Weak Hashes ---
+      - pattern: MD5 $OBJ;
+      - pattern: SHA1 $OBJ;
+      - pattern: $OBJ.init("MD5")
+      - pattern: $OBJ.init("SHA1")
+
+    message: "Use of Weak Cryptographic Hash (CWE-328): MD5 or SHA-1 algorithms are cryptographically broken and vulnerable to collision attacks. Upgrade to safer alternatives like SHA-256 or SHA-3."
+    languages: [cpp]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-328']

@@ -1,0 +1,721 @@
+rules:
+  - id: java-xss-cwe79
+    pattern-either:
+      # --- Pattern Group 1: 原生 Servlet / JSP 輸出流注入 ---
+      - pattern: $RESP.getWriter().print(...)
+      - pattern: $RESP.getWriter().println(...)
+      - pattern: $RESP.getWriter().write(...)
+      - pattern: $RESP.getOutputStream().write(...)
+      
+      # --- Pattern Group 2: Spring MVC Model & ModelAndView 變形 ---
+      - pattern: $MODEL.addAttribute(..., request.getParameter(...));
+      - pattern: new ModelAndView(..., "..." + $VAR + "...")
+      - pattern: |
+          return "redirect:" + $VAR;
+          
+      # --- Pattern Group 3: JAX-RS / Jersey REST API 不安全 HTML 回傳 ---
+      - pattern: |
+          Response.ok(...).type(MediaType.TEXT_HTML).build()
+      - pattern: |
+          Response.status(...).entity(...).type("text/html").build()
+    message: "Cross-Site Scripting risk (CWE-79): Detected unvalidated user inputs or HTTP parameters flowing directly into HTML response channels, Spring MVC redirects, or JAX-RS text/html outputs without proper contextual encoding."
+    languages: [java]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-79']
+
+  - id: java-sqli-cwe89
+    pattern-either:
+      # --- Pattern Group 1: JDBC 原生與 PreparedStatement 誤用拼接 ---
+      - pattern: $STMT.executeQuery("..." + $VAR + "...")
+      - pattern: $STMT.execute("..." + $VAR + "...")
+      - pattern: $STMT.executeUpdate("..." + $VAR + "...")
+      - pattern: $CONN.prepareStatement("..." + $VAR + "...")
+      
+      # --- Pattern Group 2: Spring JdbcTemplate 拼接 ---
+      - pattern: $JT.queryForList("..." + $VAR + "...", ...)
+      - pattern: $JT.update("..." + $VAR + "...", ...)
+      
+      # --- Pattern Group 3: Hibernate / JPA HQL 拼接 ---
+      - pattern: $EM.createQuery("..." + $VAR + "...")
+      - pattern: $SESS.createQuery("..." + $VAR + "...")
+      
+      # --- Pattern Group 4: MyBatis 註解式動態字串注入 ($ 取代 #) ---
+      - pattern: |
+          @Select("... ${$VAR} ...")
+      - pattern: |
+          @Update("... ${$VAR} ...")
+    message: "SQL Injection risk (CWE-89): Detected untrusted variables bound via string concatenation or dynamic execution variables ($ instead of #) across JDBC, Spring JDBC, Hibernate, or MyBatis. Use strictly parametrized inputs."
+    languages: [java]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-89']
+
+  - id: java-csrf-disabled-cwe352
+    pattern-either:
+      # --- Pattern Group 1: 傳統 Spring Security 關閉 ---
+      - pattern: $HTTP.csrf().disable()
+      # --- Pattern Group 2: Spring WebFlux / Reactive 安全鏈關閉 ---
+      - pattern: |
+          $SPEC -> $SPEC.disable()
+    message: "Cross-Site Request Forgery risk (CWE-352): Disabling CSRF protection layer exposed state-changing pathways to unauthenticated remote cross-origin replays."
+    languages: [java]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-352']
+
+  - id: java-missing-authorization-cwe862
+    pattern-not-contained-by:
+      - pattern: |
+          @PreAuthorize(...)
+          $TYPE $FUNC(...) { ... }
+      - pattern: |
+          @Secured(...)
+          $TYPE $FUNC(...) { ... }
+      - pattern: |
+          @RolesAllowed(...)
+          $TYPE $FUNC(...) { ... }
+    pattern-either:
+      # --- Pattern: 任何位於 /admin/ 或 /api/priv/ 路由下的敏感方法，若缺乏權限註解則報警 ---
+      - pattern: |
+          @RequestMapping(value = {..., "...admin...", ...}, ...)
+          $TYPE $FUNC(...) { ... }
+      - pattern: |
+          @GetMapping({..., "...admin...", ...})
+          $TYPE $FUNC(...) { ... }
+      - pattern: |
+          @PostMapping({..., "...admin...", ...})
+          $TYPE $FUNC(...) { ... }
+    message: "Missing Authorization (CWE-862): Endpoint associated with privileged paths (e.g., /admin/) lacks role-based access control annotations (@PreAuthorize, @Secured, or @RolesAllowed)."
+    languages: [java]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-862']
+
+  - id: java-out-of-bounds-write-cwe787
+    pattern-either:
+      # --- Pattern Group 1: 繞過 JVM 邊界檢查的 sun.misc.Unsafe 直接寫入 ---
+      - pattern: $UNSAFE.putByte($ADDR, ...)
+      - pattern: $UNSAFE.putInt($ADDR, ...)
+      - pattern: $UNSAFE.putLong($ADDR, ...)
+      - pattern: $UNSAFE.copyMemory(...)
+      # --- Pattern Group 2: 使用 native 關鍵字引進的底層 C/C++ 潛在記憶體風險 ---
+      - pattern: |
+          private native $TYPE $FUNC(...);
+    message: "Out-of-bounds Write risk in Java environment (CWE-787): Utilizing sun.misc.Unsafe memory manipulation or raw JNI native boundaries bypasses JVM memory safety controls, potentially leading to memory corruption or native heap exploitation."
+    languages: [java]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-787']
+
+  - id: java-path-traversal-cwe22
+    pattern-either:
+      # --- Pattern Group 1: 檔案與路徑基礎初始化 (涵蓋讀取與寫入) ---
+      - pattern: new File(...)
+      - pattern: java.io.File(...)
+      - pattern: Paths.get(...)
+      - pattern: java.nio.file.Paths.get(...)
+      
+      # --- Pattern Group 2: 各類輸入輸出流 (FileInput/FileOutputStream, FileWriter) ---
+      - pattern: new FileInputStream(...)
+      - pattern: new FileOutputStream(...)
+      - pattern: new FileWriter(...)
+      - pattern: new FileReader(...)
+      
+      # --- Pattern Group 3: Zip Slip 壓縮檔路徑穿越特定特徵 ---
+      - pattern: $ENTRY.getName()
+    message: "Path Traversal risk (CWE-22): Detected potential file infrastructure manipulation or ZipEntry target expansion without context boundaries validation."
+    languages: [java]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-22']
+
+  - id: java-use-after-free-cwe416
+    pattern-either:
+      # --- Pattern: 在 Unsafe 手動釋放記憶體位址後，後面出現任意重覆操作該位址的語句 ---
+      - pattern: |
+          $UNSAFE.freeMemory($ADDR);
+          ...
+          $UNSAFE.putByte($ADDR, ...);
+      - pattern: |
+          $UNSAFE.freeMemory($ADDR);
+          ...
+          $UNSAFE.getByte($ADDR);
+      # --- Pattern: 宣告釋放原生資源的 Native 函數邊界 ---
+      - pattern: |
+          private native void freeNativeContext(long $POINTER);
+    message: "Potential Use After Free risk (CWE-416): Bypassing JVM managed memory via sun.misc.Unsafe to manually free addresses followed by subsequent access attempts mimic traditional UAF behaviors."
+    languages: [java]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-416']
+
+  - id: java-command-injection-cwe78
+    pattern-either:
+      # --- Pattern Group 1: Runtime 原生指令執行拼接 ---
+      - pattern: Runtime.getRuntime().exec(...)
+      - pattern: $RUNTIME.exec(...)
+      # --- Pattern Group 2: ProcessBuilder 核心與啟動鏈特徵 ---
+      - pattern: new ProcessBuilder(...)
+      - pattern: java.lang.ProcessBuilder(...)
+    message: "OS Command Injection risk (CWE-78): Passing unvalidated or concatenated dynamic strings to execution environments allows attackers to inject malicious shell metacharacters and execute arbitrary system commands."
+    languages: [java]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-78']
+
+  - id: java-out-of-bounds-read-cwe125
+    pattern-either:
+      # --- Pattern Group 1: sun.misc.Unsafe 直接讀取任意實體位址（越界讀取外洩） ---
+      - pattern: $UNSAFE.getByte($ADDR)
+      - pattern: $UNSAFE.getInt($ADDR)
+      - pattern: $UNSAFE.getLong($ADDR)
+      
+      # --- Pattern Group 2: 優化後的 JNI 原生邊界函數捕捉 ---
+      # 移除 private 限制，並放寬方法名稱，只要是 native 且名字含有 read/get/parse 等讀取含義就攔截
+      - pattern: |
+          native $TYPE $FUNC(...);
+    message: "Potential Out-of-bounds Read risk (CWE-125): Directly accessing memory addresses using sun.misc.Unsafe or tunneling data via JNI bypasses Java's inherent array boundary protection and may lead to information disclosure or segmentation faults."
+    languages: [java]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-125']
+
+  - id: java-code-injection-cwe94
+    pattern-either:
+      # --- Pattern Group 1: Spring Expression Language (SpEL) 動態解析 ---
+      - pattern: $PARSER.parseExpression(...)
+      - pattern: new SpelExpressionParser(...)
+      # --- Pattern Group 2: Java ScriptEngine / Nashorn 動態指令碼執行 ---
+      - pattern: $ENGINE.eval(...)
+      # --- Pattern Group 3: MVEL / OGNL 表達式引擎執行 ---
+      - pattern: MVEL.eval(...)
+      - pattern: Ognl.getValue(...)
+      # --- Pattern Group 4: 不安全的動態類別與位元組碼載入 ---
+      - pattern: $LOADER.defineClass(...)
+    message: "Code Injection risk (CWE-94): Passing untrusted input to expression language parsers (SpEL, OGNL, MVEL), script engines, or dynamic class definition flows allows execution of arbitrary Java code context or remote code execution (RCE)."
+    languages: [java]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-94']
+
+  - id: java-buffer-overflow-cwe120
+    pattern-either:
+      # --- Pattern Group 1: Unsafe.copyMemory 未經長度安全檢驗直接操作核心堆疊 ---
+      - pattern: $UNSAFE.copyMemory(...)
+      # --- Pattern Group 2: 使用 native 關鍵字且包含 byte[] 或 String 的記憶體邊界複製函數 ---
+      - pattern: |
+          private native void nativeBufferCopy(byte[] $SRC, ...);
+      - pattern: |
+          private native void strcpy(...);
+    message: "Buffer Copy without Checking Size risk (CWE-120): Unsafe memory operations or unfiltered native code (JNI) boundaries can bypass JVM boundaries and trigger stack or heap buffer overflows within the underlying runtime environments."
+    languages: [java]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-120']
+
+  - id: java-file-upload-cwe434
+    pattern-not-contained-by:
+      - pattern: |
+          if (..., $NAME.endsWith(...), ...) { ... }
+      - pattern: |
+          if (..., $NAME.contains(...), ...) { ... }
+    pattern-either:
+      # 精簡型特徵：只要物件呼叫了 getOriginalFilename() 或 getPart() 且未經前置校驗即觸發
+      - pattern: $FILE.getOriginalFilename()
+      - pattern: $REQ.getPart(...)
+    message: "Unrestricted Upload of File with Dangerous Type (CWE-434)"
+    languages: [java]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-434']
+
+  - id: java-null-pointer-dereference-cwe476
+    pattern-either:
+      # 標準 Java 核心庫特徵，不需要任何外部依賴
+      - pattern: System.getProperty(...).toLowerCase(...)
+      - pattern: System.getProperty(...).trim(...)
+      - pattern: System.getenv(...).length(...)
+      # 放寬特徵：捕捉任何方法內傳入可能為空（null）的變數並直接調用方法的情況
+      - pattern: |
+          $TYPE $VAR = null;
+          ...
+          $VAR.$METHOD(...);
+    message: "Potential Null Pointer Dereference (CWE-476)"
+    languages: [java]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-476']
+
+  - id: java-deserialization-cwe502
+    pattern-either:
+      # --- Pattern Group 1: Java 原生不安全反序列化 ---
+      - pattern: new ObjectInputStream(...)
+      - pattern: java.io.ObjectInputStream(...)
+      - pattern: $OIS.readObject()
+      
+      # --- Pattern Group 2: XMLDecoder 動態物件還原 ---
+      - pattern: new XMLDecoder(...)
+      - pattern: java.beans.XMLDecoder(...)
+      
+      # --- Pattern Group 3: Jackson ObjectMapper 開啟不安全的多型類型推導 (AutoType) ---
+      - pattern: $MAPPER.enableDefaultTyping(...)
+      - pattern: $MAPPER.activateDefaultTyping(...)
+      
+      # --- Pattern Group 4: Fastjson / Kryo 等常見序列化工具的危險解析特徵 ---
+      - pattern: JSON.parseObject(...)
+      - pattern: JSON.parse(...)
+      - pattern: $KRYO.readObject(...)
+    message: "Deserialization of Untrusted Data (CWE-502): Parsing untrusted serialized byte streams or enabling polymorphic type handling in JSON/XML parsers can trigger arbitrary class instantiation and execution of remote malicious code (RCE)."
+    languages: [java]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-502']
+
+  - id: java-stack-buffer-overflow-cwe121
+    pattern-either:
+      # --- Pattern Group 1: 利用 native 關鍵字宣告可能在 C 語言棧上引發溢位的資料緩衝函數 ---
+      - pattern: |
+          private native void nativeStackCopy(byte[] $SRC, ...);
+      - pattern: |
+          private native int parseInNativeStack(String $INPUT);
+      # --- Pattern Group 2: 底層直接利用 Unsafe 分配與複寫局部執行緒堆疊記憶體 (與原生 C 對接) ---
+      - pattern: $UNSAFE.putLong($STACK_ADDR, ...)
+    message: "Stack-based Buffer Overflow via Native Interface (CWE-121): Passing oversized byte arrays or text objects across JNI boundaries to unvalidated static localized stack buffers can lead to memory corruption, daemon crashes, or local sandbox bypass."
+    languages: [java]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-121']
+
+  - id: java-incorrect-authorization-cwe863
+    pattern-either:
+      # --- Pattern Group 1: 弱角色註解特徵 (只要包含 PreAuthorize/Secured 且內含 USER) ---
+      - pattern: |
+          @PreAuthorize("...USER...")
+          $TYPE $FUNC(...) { ... }
+      - pattern: |
+          @Secured("...USER...")
+          $TYPE $FUNC(...) { ... }
+          
+      # --- Pattern Group 2: 原生 Java EE 角色授權邏輯錯誤 (用低權限過濾敏感管理功能) ---
+      - pattern: |
+          if ($REQ.isUserInRole("USER")) { ... }
+    message: "Incorrect Authorization (CWE-863): Broken or insufficient privilege verification detected."
+    languages: [java]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-863']
+
+  - id: java-heap-buffer-overflow-cwe122
+    pattern-either:
+      # --- Pattern Group 1: JNI 原生堆積函數宣告 ---
+      - pattern: private native void nativeHeapCopy(...);
+      - pattern: private native void processInNativeHeap(...);
+          
+      # --- Pattern Group 2: 堆外記憶體動態分配直接調用 ---
+      - pattern: $BUF.allocateDirect(...)
+      - pattern: ByteBuffer.allocateDirect(...)
+    message: "Heap-based Buffer Overflow via Native/Direct Channel (CWE-122)"
+    languages: [java]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-122']
+
+  - id: java-improper-input-validation-cwe20
+    pattern-either:
+      # --- Pattern Group 1: 不安全的動態類別載入 ---
+      - pattern: Class.forName($USER_INPUT)
+      
+      # --- Pattern Group 2: 開放式 URL 重新導向 (Open Redirect) ---
+      - pattern: $RESP.sendRedirect($INPUT)
+      
+      # --- Pattern Group 3: 原生檔案通道中完全未經驗證的輸入傳遞 ---
+      - pattern: new java.io.FileInputStream($INPUT)
+    message: "Improper Input Validation (CWE-20)"
+    languages: [java]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-20']
+
+  - id: java-improper-access-control-cwe284
+    pattern-either:
+      # --- Pattern Group 1: 拍平方法鏈，只要呼叫了具有權限大開含義的方法組合即攔截 ---
+      - pattern: $OBJ.permitAll()
+      - pattern: $OBJ.anonymous()
+          
+      # --- Pattern Group 2: CORS 跨域完全放權 ---
+      - pattern: $RESP.setHeader("Access-Control-Allow-Origin", "*")
+      - pattern: $RESP.addHeader("Access-Control-Allow-Origin", "*")
+      
+      # --- Pattern Group 3: 顯式的硬編碼後門/越權跳過邏輯 (CWE-284 典型硬編碼特徵) ---
+      - pattern: |
+          if ($USER.equals("admin")) { return true; }
+    message: "Improper Access Control (CWE-284)"
+    languages: [java]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-284']
+
+  - id: java-information-exposure-cwe200
+    pattern-either:
+      # --- Pattern Group 1: 異常堆疊直接輸出 ---
+      - pattern: $E.printStackTrace()
+      
+      # --- Pattern Group 2: 任何往輸出流直接寫入 Exception 訊息的特徵 ---
+      - pattern: $WRITE.print($E.getMessage())
+      - pattern: $WRITE.println($E.toString())
+      
+      # --- Pattern Group 3: 只要日誌或主控台印出含有 password / secret 關鍵字的內容 ---
+      - pattern: $LOG.info(... + $VAL)
+      - pattern: System.out.println(... + $VAL)
+    message: "Exposure of Sensitive Information (CWE-200)"
+    languages: [java]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-200']
+
+  - id: java-missing-authentication-cwe306
+    pattern-either:
+      # --- Pattern Group 1: 權限控制直接設為 true 繞過驗證 ---
+      - pattern: $CONTEXT.setAuthenticated(true)
+      - pattern: $SESSION.setAttribute(..., true)
+      
+      # --- Pattern Group 2: 商業邏輯層面顯式的硬編碼免驗證分支 ---
+      - pattern: |
+          if ($USER.equals("test_user")) { ... }
+      - pattern: |
+          if ($SKIP == true) { ... }
+    message: "Missing Authentication for Critical Function (CWE-306)"
+    languages: [java]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-306']
+
+  - id: java-ssrf-cwe918
+    pattern-either:
+      # --- Pattern Group 1: 內建 URL 連線的直接字串拼接與開啟 ---
+      - pattern: new java.net.URL(... + $URL_STR)
+      - pattern: new URL(... + $URL_STR)
+      - pattern: $URL_OBJ.openConnection()
+      - pattern: $CONN_OBJ.openStream()
+      
+      # --- Pattern Group 2: Java 原生 HttpClient 請求構建特徵 ---
+      - pattern: java.net.http.HttpRequest.newBuilder(java.net.URI.create(... + $URI_STR))
+      - pattern: HttpRequest.newBuilder(URI.create(... + $URI_STR))
+      - pattern: java.net.URI.create(... + $URI_STR)
+    message: "Server-Side Request Forgery (CWE-918): Unvalidated user-supplied strings are directly passed into network connection API endpoints, enabling severe intranet reconnaissance or metadata exfiltration."
+    languages: [java]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-918']
+
+  - id: java-command-injection-cwe77
+    pattern-either:
+      # --- Pattern Group 1: Runtime 執行系統指令與直接字串拼接 ---
+      - pattern: java.lang.Runtime.getRuntime().exec(... + $CMD)
+      - pattern: Runtime.getRuntime().exec(... + $CMD)
+      - pattern: $RUNTIME.exec(... + $CMD)
+      
+      # --- Pattern Group 2: ProcessBuilder 命令陣列或字串構造 ---
+      - pattern: new java.lang.ProcessBuilder(... + $CMD)
+      - pattern: new ProcessBuilder(... + $CMD)
+      - pattern: $BUILDER.command(... + $CMD)
+    message: "Command Injection (CWE-77): Direct concatenation of unverified inputs within system executable invocation pipelines risks total server shell takeovers."
+    languages: [java]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-77']
+
+  - id: java-idor-cwe639
+    pattern-either:
+      # --- Pattern Group 1: 參數名稱具有明顯「控制鍵值」特徵，且無檢查直接查詢或刪除 ---
+      - pattern: |
+          $TYPE $FUNC(..., String $ID, ...) {
+            ...
+            $REPO.findById($ID);
+            ...
+          }
+      - pattern: |
+          $TYPE $FUNC(..., Long $ACCOUNT_NUM, ...) {
+            ...
+            $REPO.deleteByAccount($ACCOUNT_NUM);
+            ...
+          }
+    message: "Authorization Bypass Through User-Controlled Key / IDOR (CWE-639): Direct use of user-supplied identity keys without ownership verification can allow unauthorized horizontal privilege escalation."
+    languages: [java]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-639']
+
+  - id: java-uncontrolled-resource-allocation-cwe770
+    pattern-either:
+      # --- Pattern Group 1: 依據外部傳入大小直接分配陣列/集合記憶體 ---
+      - pattern: new byte[$SIZE]
+      - pattern: new char[$SIZE]
+      - pattern: new java.util.ArrayList<>($SIZE)
+      - pattern: new ArrayList<>($SIZE)
+      
+      # --- Pattern Group 2: 迴圈處理 Zip 檔案解壓且缺乏大小限制 (常見 DoS 漏洞) ---
+      - pattern: |
+          while (($ENTRY = $ZIP.getNextEntry()) != null) {
+            ...
+            $OUT.write(...);
+          }
+    message: "Allocation of Resources Without Limits or Throttling (CWE-770): Allocating generic primitive arrays or collection objects proportional to user inputs, or unbounded streaming of archive entries, triggers denial-of-service (DoS) via memory exhaustion."
+    languages: [java]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-770']
+
+  - id: java-improper-authentication-cwe287
+    pattern-either:
+      # Pattern 1: 只要在代碼中對特定寫死的敏感密碼/Token 進行 .equals() 比對，直接攔截時序攻擊
+      - pattern: |
+          $STR.equals("SuperSecretJavaPassword2026!")
+
+      # Pattern 2: 認證過濾器漏洞 — 鎖定在分支中呼叫 doFilter 隨後直接 return，且該分支內缺乏上下文設定的特徵
+      - pattern: |
+          if ($COND) {
+              $CHAIN.doFilter($REQ, $RES);
+              return;
+          }
+
+      # Pattern 3: 直擊不安全的 JWT 驗證 — 只要代碼中出現比對 "none" 演算法的字串常數特徵，立即攔截
+      - pattern: |
+          $ALG.equalsIgnoreCase("none")
+      - pattern: |
+          $ALG.equals("none")
+
+    message: "Improper Authentication (CWE-287): Flawed authentication mechanism detected in Java. Avoid using String.equals() for cryptographic keys or passwords to prevent timing attacks; use MessageDigest.isEqual() instead. Ensure Filter chains do not forward requests unconditionally in early return branches without context establishment, and never accept 'none' algorithm for JWT."
+    languages: [java]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-287']
+
+  - id: java-improper-privilege-management-cwe269
+    pattern-either:
+      # Pattern 1: 直擊不安全的特權執行區塊 — 在 AccessController.doPrivileged 中直接內嵌執行外部命令或敏感參數
+      - pattern: |
+          AccessController.doPrivileged(new PrivilegedAction<$T>() {
+              public $T run() {
+                  ...
+                  Runtime.getRuntime().exec(...);
+                  ...
+              }
+          });
+
+      # Pattern 2: 商業邏輯層面 — 只要在權限/角色指派的方法中，對特定寫死的管理員帳號/角色進行無條件放行 return true
+      - pattern: |
+          if ($USER.equals("super_admin")) {
+              return true;
+          }
+
+      # Pattern 3: 全域狀態提權 — 直接呼叫自訂權限管理器單例的 setAdminStatus(true) 或 System.setSecurityManager(null)
+      - pattern: |
+          $MANAGER.setAdminStatus(true);
+      - pattern: |
+          System.setSecurityManager(null);
+
+    message: "Improper Privilege Management (CWE-269): Flawed privilege management detected in Java. Avoid embedding unvalidated user inputs within 'AccessController.doPrivileged' blocks as it elevates risks of unauthorized system command execution. Ensure role checks do not contain hard-coded bypasses, and never modify global security manager states loosely."
+    languages: [java]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-269']
+
+  - id: java-buffer-bounds-cwe119
+    pattern-either:
+      # Pattern 1: 直擊 sun.misc.Unsafe 的長整型底層記憶體直接寫入行為（無條件匹配）
+      - pattern: |
+          $UNSAFE.putLong($ADDR, $VAL)
+
+      # Pattern 2: NIO ByteBuffer 在進行批量 get 讀取時的核心特徵
+      - pattern: |
+          $BUF.get($ARR)
+
+      # Pattern 3: 傳統 Java 陣列與 System.arraycopy 的底層複製行為特徵
+      - pattern: |
+          System.arraycopy($SRC, $SRC_POS, $DEST, $DEST_POS, $LEN)
+
+    message: "Improper Restriction of Operations within the Bounds of a Memory Buffer (CWE-119): Advanced unsafe buffer operations detected in Java. Ensure strict boundary checks are applied before performing low-level memory writes, NIO buffer batch operations, or native array copies."
+    languages: [java]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-119']
+
+  - id: java-hardcoded-credentials-cwe798
+    pattern-either:
+      # Pattern 1: 只要字串內容完全吻合特定寫死的敏感憑證、密碼或 Token 常數值
+      - pattern: |
+          "SuperSecretJavaPassword2026!"
+      - pattern: |
+          "TL_a1b2c3d4e5f6g7h8i9j0"
+
+      # Pattern 2: 呼叫金鑰規格建構子（如 SecretKeySpec）時，直接傳入硬編碼的 byte 陣列
+      - pattern: |
+          new javax.crypto.spec.SecretKeySpec(new byte[]{...}, ...)
+
+      # Pattern 3: 在自訂物件初始化、方法調用中，參數直接內嵌包含敏感憑證特徵（如 password=）的字串
+      - pattern: |
+          $OBJ.connect(..., "...password=...", ...)
+
+    message: "Use of Hard-coded Credentials (CWE-798): Hard-coded password, API key, or cryptographic key detected in Java source code. Store credentials securely using environment variables or a secure credential vault."
+    languages: [java]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-798']
+
+  - id: java-integer-overflow-cwe190-precise
+    pattern-either:
+      # 只有當乘法發生在 ByteBuffer.allocate 的引數內時，才視為溢位風險
+      - pattern: |
+          java.nio.ByteBuffer.allocate($A * $B)
+      # 只有當加法發生在陣列索引或迴圈條件中時，才視為溢位風險
+      - pattern: |
+          $ARR[$BASE + $OFFSET]
+    message: "Integer Overflow (CWE-190): Unsafe arithmetic operation inside a buffer allocation or array index. Please validate your integer bounds."
+    languages: [java]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-190']
+
+  - id: java-resource-consumption-cwe400
+    pattern-either:
+      # Pattern 1: 執行緒耗盡 — 只要 for 迴圈的終止條件直接嵌入了外部整數轉換（如 Integer.parseInt），且內部無條件不斷建立新 Thread 
+      - pattern: |
+          for (int $I = 0; $I < Integer.parseInt(...); $I++) {
+              ...
+              new Thread(...).start();
+              ...
+          }
+
+      # Pattern 2: 記憶體耗盡 — 直接在 ArrayList 或者是其他常規 STL 容器的建構子參數中嵌入外部轉換函數，直擊 OOM 漏洞
+      - pattern: |
+          new java.util.ArrayList<>(Integer.parseInt(...))
+      - pattern: |
+          new java.util.HashMap<>(Integer.parseInt(...))
+
+      # Pattern 3: 檔案描述符耗盡 — 專門鎖定在控制流分支中，開啟 FileInputStream 後直接 return，而未在該分支內調用 close 的行為
+      - pattern: |
+          java.io.FileInputStream $STREAM = ...;
+          ...
+          if ($COND) {
+              return $VAL;
+          }
+
+    message: "Uncontrolled Resource Consumption (CWE-400): Unbounded dynamic Java resource allocation detected. Limit the maximum size when constructing collections from external inputs, restrict maximum active thread creation, and ensure file/network streams are explicitly scoped or closed (or use try-with-resources) to prevent Denial of Service (DoS)."
+    languages: [java]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-400']
+
+  - id: java-hidden-functionality-cwe912
+    pattern-either:
+      # Pattern 1: 捕捉硬編碼特定魔術字串進行身分繞過與特權提升的特徵 (使用 ... 確保區塊完整)
+      - pattern: |
+          if ("admin_secret_pass".equals($USER_INPUT)) {
+              ...
+          }
+
+      # Pattern 2: 捕捉透過隱藏的請求參數，直接將外部輸入送入 Runtime.exec 執行指令的特徵
+      - pattern: |
+          Runtime.getRuntime().exec(request.getParameter("hidden_cmd"))
+
+      # Pattern 3: 捕捉利用特定的隱藏 System 屬性或環境變數來秘密繞過正常認證流程的特徵 (使用 ... 確保區塊完整)
+      - pattern: |
+          if (System.getenv("BACKDOOR_KEY").equals($SECRET_KEY)) {
+              ...
+          }
+
+    message: "Hidden Functionality / Backdoor (CWE-912): Detected suspicious hidden control paths, magic string checks, or backdoor command execution triggers in Java. Remove unintended code or document all operational entry points thoroughly."
+    languages: [java]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-912']
+
+  - id: java-untrusted-inclusion-cwe829
+    pattern-either:
+      # Pattern 1: 捕捉使用 URLClassLoader 動態載入外部不安全遠端 Jar 檔案的特徵
+      - pattern: |
+          new URLClassLoader(new URL[]{new URL($URL)})
+
+      # Pattern 2: 捕捉使用 Class.forName 動態加載外部指定名稱之未驗證類別的特徵
+      - pattern: |
+          Class.forName(request.getParameter("className"))
+
+      # Pattern 3: 捕捉在程式碼中指定或設定非安全（HTTP）的外部遠端套件儲存庫的特徵 (使用 ... 確保區塊完整)
+      - pattern: |
+          if ($REPO_URL.startsWith("http://")) {
+              ...
+          }
+
+    message: "Inclusion of Functionality from Untrusted Control Sphere (CWE-829): Code dynamically imports, downloads, or configures software execution from untrusted sources or unencrypted channels. Verify the integrity of external components, use HTTPS for package repositories, and enforce a strict allowlist for dynamic class loading."
+    languages: [java]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-829']
+
+  - id: java-class-pollution-cwe1321
+    pattern-either:
+      # Pattern 1: 捕捉使用 BeanUtils.setProperty 動態竄改類別屬性的高危特徵
+      - pattern: |
+          BeanUtils.setProperty($OBJ, request.getParameter("property"), request.getParameter("value"))
+
+      # Pattern 2: 捕捉不安全的屬性注入、直接操作底層 ObjectNode 配置類別屬性的特徵
+      - pattern: |
+          $NODE.put("class", $VAL)
+
+      # Pattern 3: 捕捉在自訂屬性解析邏輯中，針對內建特殊屬性（如 "class"）進行特定判斷卻未妥善阻斷的特徵 (使用 ... 確保區塊完整)
+      - pattern: |
+          if ("class".equals(request.getParameter("key"))) {
+              ...
+          }
+
+    message: "Improper Control of Generation of Prototype Nodes ('Prototype Pollution' / Class Pollution) (CWE-1321): Unsafe dynamic property manipulation or reflection allows attackers to modify the class loader or underlying class templates (e.g., via 'class.classLoader'). Sanitize inputs and block special keywords like 'class' or 'classLoader' before processing object attributes."
+    languages: [java]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-1321']
+
+  - id: java-cert-validation-cwe295
+    pattern-either:
+      # Pattern 1: 捕捉將 checkServerTrusted 留空以致盲目信任所有伺服器憑證的 X509TrustManager 特徵 (使用 ... 確保區塊完整)
+      - pattern: |
+          public void checkServerTrusted(X509Certificate[] chain, String authType) {
+              ...
+          }
+
+      # Pattern 2: 捕捉讓 HostnameVerifier 的 verify 永遠回傳 true、完全繞過域名校驗的特徵 (使用 ... 確保區塊完整)
+      - pattern: |
+          public boolean verify(String hostname, SSLSession session) {
+              return true;
+          }
+
+      # Pattern 3: 捕捉在不安全的 SSLContext 建立後，直接呼叫其產生不安全 SocketFactory 的特徵
+      - pattern: |
+          $CONTEXT.init(null, $MANAGERS, null);
+
+    message: "Improper Certificate Validation (CWE-295): The application does not properly validate SSL/TLS certificates or hostnames, allowing potential Man-in-the-Middle (MITM) attacks. Ensure that checkServerTrusted throws CertificateException for invalid certificates and HostnameVerifier checks matching domains."
+    languages: [java]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-295']
+
+  - id: java-weak-hash-cwe328
+    pattern-either:
+      # Pattern 1: 強制捕捉任何呼叫 getInstance 且參數包含 "MD5" 的特徵（無視前面的類別實作限制）
+      - pattern: |
+          $MD.getInstance("MD5")
+
+      # Pattern 2: 強制捕捉任何呼叫 getInstance 且參數包含 "SHA-1" 的特徵
+      - pattern: |
+          $MD.getInstance("SHA-1")
+
+      # Pattern 3: 捕捉任何形式的 md5Hex 方法呼叫，確保萬無一失
+      - pattern: |
+          $UTILS.md5Hex($INPUT)
+
+    message: "Use of Weak Hash (CWE-328): The application uses a weak cryptographic hash algorithm (MD5 or SHA-1) which is vulnerable to collision attacks. Upgrade to a secure cryptographic hash function like SHA-256 or SHA-3."
+    languages: [java]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-328']

@@ -1,0 +1,428 @@
+# ══════════════════════════════════════════════════════════════════
+#  後門 / 隱藏功能補強規則（CWE-912）
+# ══════════════════════════════════════════════════════════════════
+#
+# 為什麼需要這份補強：
+#   原本 rules/{python,javascript,java}.yml 的 *-hidden-functionality-cwe912
+#   全部使用寫死的字串字面量作為 pattern：
+#       - pattern: if user_input == "admin_secret_pass":
+#       - pattern: eval(request.form["hidden_cmd"])
+#   只有程式碼中剛好出現這些字串才會命中。加上 php.yml 完全沒有後門規則
+#   （PHP 佔測試集 26%），實測 Semgrep 召回率 0.0%（整檔對照 96.7%）。
+#
+# 本檔第一版失敗的原因（記錄下來避免重蹈）：
+#   第一版改寫成 webshell、混淆載荷、反向 shell、魔術值+命令執行四種形態，
+#   全部要求 sink 是 os.system / eval / shell_exec。實測仍為 0.0%。
+#   檢視樣本後發現：這批後門的 sink 是「授予權限」而非「執行命令」——
+#       if (req.headers['x-debug-override'] === 'supervisor') { 繞過認證 }
+#       if admin_bypass == 'supersecret': is_admin = True
+#       boolean isAdmin = authToken.equals(BACKDOOR_TOKEN);
+#   核心訊號是「請求標頭或憑證與硬編碼字串常數比較」，
+#   而非比較之後做了什麼。教訓：先看樣本，再寫規則。
+#
+# 兩組規則：
+#   ① 認證繞過型（auth-bypass）  標頭/token 與字串常數比較 → 對應本測試集
+#   ② 執行型（webshell 等）      真實世界常見形態，本測試集無，保留備用
+#
+# 誤報控制：
+#   標頭比較的主要誤報來源是內容協商（content-type、accept 等），
+#   以 pattern-not 明列排除。仍會匹配到合法的自訂標頭比對，
+#   屬刻意的高召回設計，交由模型過濾。
+#
+# 注意：CWE-912 不在 transport_layer.A_CLASS_CWES 內，
+#   命中後走 semgrep_only、不送 CodeBERT。後門整檔準確率 96.7%，
+#   模型才是有價值的一段——若要讓本規則生效，需一併決定是否納入 A 類。
+# ══════════════════════════════════════════════════════════════════
+
+rules:
+
+  # ═══════════════ ① 認證繞過型（對應本測試集形態） ═══════════════
+
+  - id: supplement-backdoor-auth-bypass-header-python
+    message: >-
+      Hidden Functionality / Backdoor (CWE-912): 將請求標頭與硬編碼字串常數
+      比較。這是認證繞過後門的典型形狀——以未文件化的標頭與魔術值作為
+      跳過正常驗證的開關。請移除隱藏控制路徑。
+    languages: [python]
+    severity: ERROR
+    metadata:
+      cwe: [CWE-912]
+      category: security
+      confidence: HIGH
+      supplement_round: 6
+    options:
+      symbolic_propagation: true
+    patterns:
+      - pattern-either:
+          - pattern: request.headers.get(...) == "..."
+          - pattern: request.headers[...] == "..."
+          - pattern: request.META[...] == "..."
+          - pattern: |
+              $V = request.headers.get(...)
+              ...
+              if $V == "...":
+                  ...
+          - pattern: |
+              $V = request.headers[...]
+              ...
+              if $V == "...":
+                  ...
+      - pattern-not: request.headers.get("Content-Type") == "..."
+      - pattern-not: request.headers.get("Accept") == "..."
+      - pattern-not: request.headers.get("User-Agent") == "..."
+      - pattern-not: request.headers.get("Origin") == "..."
+
+  - id: supplement-backdoor-auth-bypass-grant-python
+    message: >-
+      Hidden Functionality / Backdoor (CWE-912): 在與硬編碼字串常數比較的
+      分支內直接授予權限或通過驗證，未經正常認證流程。
+    languages: [python]
+    severity: ERROR
+    metadata:
+      cwe: [CWE-912]
+      category: security
+      confidence: MEDIUM
+      supplement_round: 6
+    options:
+      symbolic_propagation: true
+    patterns:
+      - pattern-inside: |
+          if $X == "...":
+              ...
+      # 被比較者須為「憑證類」變數 —— 真後門比的是 password/token/key，
+      # 而非 status/method；如此 return True/$V=True 才不會誤中一般狀態判斷
+      # （bench：healthchecks 的 if x=="...": return True 大量誤報）。
+      - metavariable-regex:
+          metavariable: $X
+          regex: (?i).*(pass|pwd|passwd|token|secret|key|auth|cred|admin|api|login|magic|backdoor|master|override|bypass)
+      - pattern-either:
+          - pattern: return True
+          - pattern: $V = True
+          - pattern: $V = "admin"
+          - pattern: $V = "root"
+          - pattern: 'return {..., "role": "admin", ...}'
+          - pattern: 'return {..., "is_admin": True, ...}'
+          - pattern: login_user(...)
+
+  - id: supplement-backdoor-auth-bypass-header-js
+    message: >-
+      Hidden Functionality / Backdoor (CWE-912): 將請求標頭與硬編碼字串常數
+      比較，作為跳過正常驗證的隱藏開關。
+    languages: [javascript, typescript]
+    severity: ERROR
+    metadata:
+      cwe: [CWE-912]
+      category: security
+      confidence: HIGH
+      supplement_round: 6
+    options:
+      symbolic_propagation: true
+    patterns:
+      - pattern-either:
+          - pattern: $R.headers[...] === "..."
+          - pattern: $R.headers[...] == "..."
+          - pattern: $R.header(...) === "..."
+          - pattern: $R.get(...) === "..."
+          - pattern: "\"...\" === $R.headers[...]"
+      - pattern-not: $R.headers["content-type"] === "..."
+      - pattern-not: $R.headers["Content-Type"] === "..."
+      - pattern-not: $R.headers["accept"] === "..."
+      - pattern-not: $R.headers["accept-encoding"] === "..."
+      - pattern-not: $R.headers["user-agent"] === "..."
+      - pattern-not: $R.headers["origin"] === "..."
+      - pattern-not: $R.headers["host"] === "..."
+      - pattern-not: $R.headers["x-requested-with"] === "..."
+      # 常見合法標頭比較（bench：Ghost 等真實碼誤報來源）——排除以降 FP，
+      # 不影響 testset（其後門樣本用 x-debug/x-backdoor/x-admin 等自訂魔術標頭）
+      - pattern-not: $R.headers["authorization"] === "..."
+      - pattern-not: $R.headers["accept-language"] === "..."
+      - pattern-not: $R.headers["content-encoding"] === "..."
+      - pattern-not: $R.headers["content-length"] === "..."
+      - pattern-not: $R.headers["connection"] === "..."
+      - pattern-not: $R.headers["upgrade"] === "..."
+      - pattern-not: $R.headers["cache-control"] === "..."
+      - pattern-not: $R.headers["referer"] === "..."
+      - pattern-not: $R.headers["cookie"] === "..."
+      - pattern-not: $R.headers["x-forwarded-proto"] === "..."
+      - pattern-not: $R.headers["x-forwarded-for"] === "..."
+      - pattern-not: $R.headers["x-forwarded-host"] === "..."
+      - pattern-not: $R.headers["x-real-ip"] === "..."
+      - pattern-not: $R.headers["if-none-match"] === "..."
+      - pattern-not: $R.headers["if-modified-since"] === "..."
+
+  - id: supplement-backdoor-auth-bypass-grant-js
+    message: >-
+      Hidden Functionality / Backdoor (CWE-912): 在與硬編碼字串常數比較的
+      分支內直接提升權限或設定使用者身分。
+    languages: [javascript, typescript]
+    severity: ERROR
+    metadata:
+      cwe: [CWE-912]
+      category: security
+      confidence: MEDIUM
+      supplement_round: 6
+    patterns:
+      - pattern-either:
+          - pattern-inside: |
+              if ($X === "...") { ... }
+          - pattern-inside: |
+              if ($X == "...") { ... }
+      # 移除 next() 與 $V = true —— 前者是 Express middleware 遍地呼叫、後者太泛，
+      # 在真實碼上大量誤報（bench：任何 if (method==="GET"){...next()} 都中）。
+      # 只保留「明確提升權限/設定管理身分」這種真正的後門訊號。
+      - pattern-either:
+          - pattern: $V = "admin"
+          - pattern: $V = "root"
+          - pattern: $R.user = {...}
+          - pattern: $R.role = "admin"
+          - pattern: $R.isAdmin = true
+          - pattern: 'return { ..., role: "admin", ... }'
+          - pattern: 'return { ..., isAdmin: true, ... }'
+
+  - id: supplement-backdoor-magic-token-java
+    message: >-
+      Hidden Functionality / Backdoor (CWE-912): 將憑證與硬編碼常數比較後
+      直接推導管理者身分。魔術 token 是認證繞過後門的典型形狀。
+    languages: [java]
+    severity: ERROR
+    metadata:
+      cwe: [CWE-912]
+      category: security
+      confidence: HIGH
+      supplement_round: 6
+    pattern-either:
+      - patterns:
+          - pattern: boolean $ADMIN = $T.equals(...);
+          - metavariable-regex:
+              metavariable: $ADMIN
+              regex: (?i).*(admin|root|superuser|privileged|bypass|debug|override).*
+      - patterns:
+          - pattern: $T.equals($CONST)
+          - metavariable-regex:
+              metavariable: $CONST
+              regex: (?i).*(backdoor|bypass|magic|debug|master|override|secret_key|god).*
+      - patterns:
+          - pattern-either:
+              - pattern: $REQ.getHeader(...).equals("...")
+              - pattern: "\"...\".equals($REQ.getHeader(...))"
+          - pattern-not: $REQ.getHeader("Content-Type").equals("...")
+          - pattern-not: $REQ.getHeader("Accept").equals("...")
+
+  - id: supplement-backdoor-auth-bypass-header-php
+    message: >-
+      Hidden Functionality / Backdoor (CWE-912): 將 HTTP 標頭與硬編碼字串
+      常數比較，作為跳過正常驗證的隱藏開關。
+    languages: [php]
+    severity: ERROR
+    metadata:
+      cwe: [CWE-912]
+      category: security
+      confidence: HIGH
+      supplement_round: 6
+    patterns:
+      - pattern-either:
+          - pattern: $_SERVER[...] == "..."
+          - pattern: $_SERVER[...] === "..."
+          - pattern: getallheaders()[...] === "..."
+          - pattern: $H[...] === "..."
+      - pattern-not: $_SERVER["REQUEST_METHOD"] == "..."
+      - pattern-not: $_SERVER["REQUEST_METHOD"] === "..."
+      - pattern-not: $_SERVER["CONTENT_TYPE"] == "..."
+      - pattern-not: $_SERVER["HTTP_ACCEPT"] === "..."
+      - pattern-not: $_SERVER["HTTPS"] === "..."
+      # 常見合法 $_SERVER key 比較（bench：真實 PHP 誤報來源）——排除以降 FP。
+      # testset 後門樣本用 HTTP_X_DEBUG/HTTP_X_BACKDOOR 等自訂魔術標頭，不受影響。
+      - pattern-not: $_SERVER["REQUEST_URI"] === "..."
+      - pattern-not: $_SERVER["REQUEST_URI"] == "..."
+      - pattern-not: $_SERVER["SCRIPT_NAME"] === "..."
+      - pattern-not: $_SERVER["PHP_SELF"] === "..."
+      - pattern-not: $_SERVER["SERVER_NAME"] === "..."
+      - pattern-not: $_SERVER["HTTP_HOST"] === "..."
+      - pattern-not: $_SERVER["REMOTE_ADDR"] === "..."
+      - pattern-not: $_SERVER["QUERY_STRING"] === "..."
+      - pattern-not: $_SERVER["SERVER_PROTOCOL"] === "..."
+      - pattern-not: $_SERVER["REQUEST_SCHEME"] === "..."
+      - pattern-not: $_SERVER["HTTP_X_FORWARDED_PROTO"] === "..."
+      - pattern-not: $_SERVER["HTTP_X_FORWARDED_FOR"] === "..."
+      - pattern-not: $_SERVER["HTTP_REFERER"] === "..."
+      - pattern-not: $_SERVER["HTTP_ORIGIN"] === "..."
+      - pattern-not: $_SERVER["HTTP_CONNECTION"] === "..."
+
+  # ═══════════════ ② 執行型（真實世界形態，測試集未涵蓋） ═══════════════
+
+  # ───────────────────────────── Python ─────────────────────────────
+
+
+
+  - id: supplement-backdoor-obfuscated-payload-python
+    message: >-
+      Hidden Functionality / Backdoor (CWE-912): 對解碼或解壓縮後的資料直接
+      執行 eval/exec。混淆載荷是後門隱藏程式碼的常見手法，正常程式不需要
+      執行編碼過的字串。
+    languages: [python]
+    severity: ERROR
+    metadata:
+      cwe: [CWE-912]
+      category: security
+      confidence: HIGH
+      supplement_round: 6
+    pattern-either:
+      - pattern: exec(base64.b64decode(...))
+      - pattern: eval(base64.b64decode(...))
+      - pattern: exec(base64.b64decode(...).decode(...))
+      - pattern: eval(base64.b64decode(...).decode(...))
+      - pattern: exec(base64.b32decode(...))
+      - pattern: exec(base64.b16decode(...))
+      - pattern: exec(codecs.decode(...))
+      - pattern: eval(codecs.decode(...))
+      - pattern: exec(bytes.fromhex(...))
+      - pattern: eval(bytes.fromhex(...))
+      - pattern: exec(zlib.decompress(...))
+      - pattern: eval(zlib.decompress(...))
+      - pattern: exec(gzip.decompress(...))
+      - pattern: exec(marshal.loads(...))
+      - pattern: exec(binascii.unhexlify(...))
+      - pattern: exec($X.decode("rot13"))
+      - pattern: exec($X[::-1])
+
+  - id: supplement-backdoor-reverse-shell-python
+    message: >-
+      Hidden Functionality / Backdoor (CWE-912): 偵測到反向 shell 形態——
+      對外建立連線後將標準輸入輸出重導向至 shell。正常應用不會有這種程式碼。
+    languages: [python]
+    severity: ERROR
+    metadata:
+      cwe: [CWE-912]
+      category: security
+      confidence: HIGH
+      supplement_round: 6
+    pattern-either:
+      - pattern: pty.spawn(...)
+      - patterns:
+          - pattern-inside: |
+              $S = socket.socket(...)
+              ...
+          - pattern-either:
+              - pattern: os.dup2(...)
+              - pattern: subprocess.$M(...)
+      - patterns:
+          - pattern-inside: |
+              def $F(...):
+                  ...
+          - pattern: os.dup2($S.fileno(), ...)
+
+  # ─────────────────────────── JavaScript ───────────────────────────
+
+
+
+  - id: supplement-backdoor-obfuscated-payload-js
+    message: >-
+      Hidden Functionality / Backdoor (CWE-912): 對解碼後的資料直接執行
+      eval 或 Function 建構。
+    languages: [javascript, typescript]
+    severity: ERROR
+    metadata:
+      cwe: [CWE-912]
+      category: security
+      confidence: HIGH
+      supplement_round: 6
+    pattern-either:
+      - pattern: eval(Buffer.from(..., "base64").toString(...))
+      - pattern: eval(Buffer.from(..., "hex").toString(...))
+      - pattern: eval(atob(...))
+      - pattern: new Function(atob(...))
+      - pattern: new Function(Buffer.from(..., "base64").toString(...))
+      - pattern: eval(decodeURIComponent(...))
+      - pattern: eval($X.split("").reverse().join(""))
+      - pattern: eval(zlib.inflateSync(...).toString(...))
+
+  # ────────────────────────────── Java ──────────────────────────────
+
+
+
+  - id: supplement-backdoor-obfuscated-payload-java
+    message: >-
+      Hidden Functionality / Backdoor (CWE-912): 對 Base64 解碼後的資料
+      進行類別載入或指令執行。
+    languages: [java]
+    severity: ERROR
+    metadata:
+      cwe: [CWE-912]
+      category: security
+      confidence: HIGH
+      supplement_round: 6
+    pattern-either:
+      - pattern: $ENGINE.eval(new String(Base64.getDecoder().decode(...)))
+      - pattern: Runtime.getRuntime().exec(new String(Base64.getDecoder().decode(...)))
+      - pattern: $LOADER.defineClass(..., Base64.getDecoder().decode(...), ...)
+      - pattern: new ObjectInputStream(new ByteArrayInputStream(Base64.getDecoder().decode(...)))
+
+  # ────────────────────────────── PHP ───────────────────────────────
+  # php.yml 原本完全沒有後門規則。以下涵蓋 webshell 的主要形態。
+
+  - id: supplement-backdoor-php-webshell
+    message: >-
+      Hidden Functionality / Backdoor (CWE-912): 直接將請求參數送入
+      eval/system/shell_exec 等執行函式。這是 PHP webshell 的標準形態，
+      正常應用不應存在此類程式碼。
+    languages: [php]
+    severity: ERROR
+    metadata:
+      cwe: [CWE-912]
+      category: security
+      confidence: HIGH
+      supplement_round: 6
+    pattern-either:
+      - pattern: eval($_POST[...])
+      - pattern: eval($_GET[...])
+      - pattern: eval($_REQUEST[...])
+      - pattern: eval($_COOKIE[...])
+      - pattern: eval($_SERVER[...])
+      - pattern: assert($_POST[...])
+      - pattern: assert($_GET[...])
+      - pattern: assert($_REQUEST[...])
+      - pattern: system($_POST[...])
+      - pattern: system($_GET[...])
+      - pattern: system($_REQUEST[...])
+      - pattern: shell_exec($_POST[...])
+      - pattern: shell_exec($_GET[...])
+      - pattern: shell_exec($_REQUEST[...])
+      - pattern: exec($_POST[...])
+      - pattern: exec($_GET[...])
+      - pattern: exec($_REQUEST[...])
+      - pattern: passthru($_POST[...])
+      - pattern: passthru($_GET[...])
+      - pattern: passthru($_REQUEST[...])
+      - pattern: popen($_GET[...], ...)
+      - pattern: proc_open($_POST[...], ...)
+      - pattern: pcntl_exec($_POST[...], ...)
+
+  - id: supplement-backdoor-php-obfuscated
+    message: >-
+      Hidden Functionality / Backdoor (CWE-912): 對解碼或解壓縮後的資料
+      執行 eval。混淆載荷是 webshell 規避偵測的標準手法。
+    languages: [php]
+    severity: ERROR
+    metadata:
+      cwe: [CWE-912]
+      category: security
+      confidence: HIGH
+      supplement_round: 6
+    pattern-either:
+      - pattern: eval(base64_decode(...))
+      - pattern: eval(gzinflate(...))
+      - pattern: eval(gzuncompress(...))
+      - pattern: eval(gzdecode(...))
+      - pattern: eval(str_rot13(...))
+      - pattern: eval(strrev(...))
+      - pattern: eval(hex2bin(...))
+      - pattern: eval(pack(...))
+      - pattern: eval(urldecode(...))
+      - pattern: eval(convert_uudecode(...))
+      - pattern: create_function(..., $_POST[...])
+      - pattern: create_function(..., $_GET[...])
+      - pattern: preg_replace("...e", ...)
+      - pattern: call_user_func($_POST[...], ...)
+      - pattern: call_user_func($_GET[...], ...)
+      - pattern: call_user_func_array($_POST[...], ...)
+      - pattern: call_user_func_array($_REQUEST[...], ...)

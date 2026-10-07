@@ -1,0 +1,635 @@
+{
+  "_meta": {
+    "description": "CWE 百科：以 CWE 編號為主鍵，記錄每個 CWE 的名稱、OWASP 對應、預設嚴重度、適用語言。此檔為全系統共用的單一事實來源之一。",
+    "version": "1.1.0",
+    "language_codes": [
+      "python",
+      "javascript",
+      "typescript",
+      "php",
+      "java",
+      "c",
+      "cpp",
+      "csharp"
+    ],
+    "note": "applicable_languages 為空陣列代表『尚未界定』，融合層應視為不過濾；若要限制語言必須明列。",
+    "changelog": "1.1.0 新增弱加密家族 CWE-326/327/916。原因：實測 DES/ECB 樣本被官方規則以 CWE-326 回報，但 catalog 僅有 CWE-328（弱雜湊），對應鏈斷裂導致 finding 被丟棄。"
+  },
+  "CWE-78": {
+    "name_en": "OS Command Injection",
+    "name_zh": "作業系統指令注入",
+    "owasp": "A03:2021-Injection",
+    "severity": "HIGH",
+    "applicable_languages": [
+      "python",
+      "javascript",
+      "typescript",
+      "php",
+      "java",
+      "c",
+      "cpp",
+      "csharp"
+    ],
+    "description_zh": "未經淨化的輸入被組進系統指令字串，導致任意指令執行",
+    "reference": "https://cwe.mitre.org/data/definitions/78.html"
+  },
+  "CWE-77": {
+    "name_en": "Command Injection",
+    "name_zh": "指令注入",
+    "owasp": "A03:2021-Injection",
+    "severity": "HIGH",
+    "applicable_languages": [
+      "python",
+      "javascript",
+      "typescript",
+      "php",
+      "java",
+      "c",
+      "cpp",
+      "csharp"
+    ],
+    "description_zh": "特殊字元未經中和即用於指令，攻擊者可注入額外指令",
+    "reference": "https://cwe.mitre.org/data/definitions/77.html"
+  },
+  "CWE-89": {
+    "name_en": "SQL Injection",
+    "name_zh": "SQL 注入",
+    "owasp": "A03:2021-Injection",
+    "severity": "HIGH",
+    "applicable_languages": [
+      "python",
+      "javascript",
+      "typescript",
+      "php",
+      "java",
+      "csharp"
+    ],
+    "description_zh": "使用者輸入未經參數化直接拼接進 SQL 查詢",
+    "reference": "https://cwe.mitre.org/data/definitions/89.html"
+  },
+  "CWE-94": {
+    "name_en": "Code Injection",
+    "name_zh": "程式碼注入",
+    "owasp": "A03:2021-Injection",
+    "severity": "HIGH",
+    "applicable_languages": [
+      "python",
+      "javascript",
+      "typescript",
+      "php",
+      "java"
+    ],
+    "description_zh": "未信任輸入被當作程式碼解譯執行（eval/exec 類）",
+    "reference": "https://cwe.mitre.org/data/definitions/94.html"
+  },
+  "CWE-79": {
+    "name_en": "Cross-site Scripting",
+    "name_zh": "跨站腳本",
+    "owasp": "A03:2021-Injection",
+    "severity": "HIGH",
+    "applicable_languages": [
+      "python",
+      "javascript",
+      "typescript",
+      "php",
+      "java"
+    ],
+    "description_zh": "使用者輸入未經編碼即輸出到 HTML，導致瀏覽器執行惡意腳本",
+    "reference": "https://cwe.mitre.org/data/definitions/79.html"
+  },
+  "CWE-22": {
+    "name_en": "Path Traversal",
+    "name_zh": "路徑遊走",
+    "owasp": "A01:2021-Broken Access Control",
+    "severity": "HIGH",
+    "applicable_languages": [
+      "python",
+      "javascript",
+      "typescript",
+      "php",
+      "java",
+      "c",
+      "cpp",
+      "csharp"
+    ],
+    "description_zh": "使用者控制的路徑未經驗證用於檔案存取，可跳脫預期目錄",
+    "reference": "https://cwe.mitre.org/data/definitions/22.html"
+  },
+  "CWE-502": {
+    "name_en": "Deserialization of Untrusted Data",
+    "name_zh": "不安全反序列化",
+    "owasp": "A08:2021-Software and Data Integrity Failures",
+    "severity": "HIGH",
+    "applicable_languages": [
+      "python",
+      "javascript",
+      "typescript",
+      "php",
+      "java"
+    ],
+    "description_zh": "反序列化未信任資料，可觸發任意物件建構或遠端程式碼執行",
+    "reference": "https://cwe.mitre.org/data/definitions/502.html"
+  },
+  "CWE-798": {
+    "name_en": "Use of Hard-coded Credentials",
+    "name_zh": "硬編碼憑證",
+    "owasp": "A07:2021-Identification and Authentication Failures",
+    "severity": "HIGH",
+    "applicable_languages": [
+      "python",
+      "javascript",
+      "typescript",
+      "php",
+      "java",
+      "c",
+      "cpp",
+      "csharp"
+    ],
+    "description_zh": "帳密、金鑰或權杖直接寫死在原始碼中",
+    "reference": "https://cwe.mitre.org/data/definitions/798.html"
+  },
+  "CWE-328": {
+    "name_en": "Use of Weak Hash",
+    "name_zh": "弱雜湊演算法",
+    "owasp": "A02:2021-Cryptographic Failures",
+    "severity": "MEDIUM",
+    "applicable_languages": [
+      "python",
+      "javascript",
+      "typescript",
+      "php",
+      "java",
+      "c",
+      "cpp",
+      "csharp"
+    ],
+    "description_zh": "使用 MD5/SHA1 等已被攻破的雜湊演算法",
+    "reference": "https://cwe.mitre.org/data/definitions/328.html"
+  },
+  "CWE-295": {
+    "name_en": "Improper Certificate Validation",
+    "name_zh": "憑證驗證不當",
+    "owasp": "A02:2021-Cryptographic Failures",
+    "severity": "HIGH",
+    "applicable_languages": [
+      "python",
+      "javascript",
+      "typescript",
+      "php",
+      "java",
+      "csharp"
+    ],
+    "description_zh": "停用或未正確驗證 TLS/SSL 憑證",
+    "reference": "https://cwe.mitre.org/data/definitions/295.html"
+  },
+  "CWE-1321": {
+    "name_en": "Prototype Pollution",
+    "name_zh": "原型污染",
+    "owasp": "A08:2021-Software and Data Integrity Failures",
+    "severity": "HIGH",
+    "applicable_languages": [
+      "javascript",
+      "typescript"
+    ],
+    "description_zh": "透過 __proto__ 等鍵污染物件原型鏈（JS 專屬）",
+    "reference": "https://cwe.mitre.org/data/definitions/1321.html"
+  },
+  "CWE-918": {
+    "name_en": "Server-Side Request Forgery",
+    "name_zh": "伺服器端請求偽造",
+    "owasp": "A10:2021-SSRF",
+    "severity": "HIGH",
+    "applicable_languages": [
+      "python",
+      "javascript",
+      "typescript",
+      "php",
+      "java",
+      "csharp"
+    ],
+    "description_zh": "使用者控制的 URL 直接用於伺服器發出請求，可探測內網或竊取雲端憑證",
+    "reference": "https://cwe.mitre.org/data/definitions/918.html"
+  },
+  "CWE-200": {
+    "name_en": "Exposure of Sensitive Information",
+    "name_zh": "敏感資訊暴露",
+    "owasp": "A01:2021-Broken Access Control",
+    "severity": "MEDIUM",
+    "applicable_languages": [
+      "python",
+      "javascript",
+      "typescript",
+      "php",
+      "java",
+      "csharp"
+    ],
+    "description_zh": "堆疊追蹤、環境變數或錯誤訊息等敏感資訊外洩給未授權對象",
+    "reference": "https://cwe.mitre.org/data/definitions/200.html"
+  },
+  "CWE-352": {
+    "name_en": "Cross-Site Request Forgery",
+    "name_zh": "跨站請求偽造",
+    "owasp": "A01:2021-Broken Access Control",
+    "severity": "MEDIUM",
+    "applicable_languages": [
+      "python",
+      "javascript",
+      "typescript",
+      "php",
+      "java",
+      "csharp"
+    ],
+    "description_zh": "缺少或停用 CSRF 防護，狀態變更請求可被跨站偽造",
+    "reference": "https://cwe.mitre.org/data/definitions/352.html"
+  },
+  "CWE-862": {
+    "name_en": "Missing Authorization",
+    "name_zh": "缺少授權",
+    "owasp": "A01:2021-Broken Access Control",
+    "severity": "HIGH",
+    "applicable_languages": [
+      "python",
+      "javascript",
+      "typescript",
+      "php",
+      "java",
+      "csharp"
+    ],
+    "description_zh": "敏感端點缺少角色/權限檢查",
+    "reference": "https://cwe.mitre.org/data/definitions/862.html"
+  },
+  "CWE-863": {
+    "name_en": "Incorrect Authorization",
+    "name_zh": "錯誤授權",
+    "owasp": "A01:2021-Broken Access Control",
+    "severity": "HIGH",
+    "applicable_languages": [
+      "python",
+      "javascript",
+      "typescript",
+      "php",
+      "java",
+      "csharp"
+    ],
+    "description_zh": "授權邏輯有缺陷，低權限可存取高權限功能",
+    "reference": "https://cwe.mitre.org/data/definitions/863.html"
+  },
+  "CWE-306": {
+    "name_en": "Missing Authentication for Critical Function",
+    "name_zh": "關鍵功能缺少認證",
+    "owasp": "A07:2021-Identification and Authentication Failures",
+    "severity": "HIGH",
+    "applicable_languages": [
+      "python",
+      "javascript",
+      "typescript",
+      "php",
+      "java",
+      "csharp"
+    ],
+    "description_zh": "轉帳、改密碼等關鍵功能未加認證守衛",
+    "reference": "https://cwe.mitre.org/data/definitions/306.html"
+  },
+  "CWE-284": {
+    "name_en": "Improper Access Control",
+    "name_zh": "存取控制不當",
+    "owasp": "A01:2021-Broken Access Control",
+    "severity": "HIGH",
+    "applicable_languages": [
+      "python",
+      "javascript",
+      "typescript",
+      "php",
+      "java",
+      "csharp"
+    ],
+    "description_zh": "存取控制設定過寬（如 CORS 全開、硬編碼放行）",
+    "reference": "https://cwe.mitre.org/data/definitions/284.html"
+  },
+  "CWE-639": {
+    "name_en": "Authorization Bypass Through User-Controlled Key",
+    "name_zh": "不安全的直接物件參考 (IDOR)",
+    "owasp": "A01:2021-Broken Access Control",
+    "severity": "HIGH",
+    "applicable_languages": [
+      "python",
+      "javascript",
+      "typescript",
+      "php",
+      "java",
+      "csharp"
+    ],
+    "description_zh": "直接使用使用者提供的識別鍵查詢/操作而未驗證擁有權，可水平越權",
+    "reference": "https://cwe.mitre.org/data/definitions/639.html"
+  },
+  "CWE-434": {
+    "name_en": "Unrestricted File Upload",
+    "name_zh": "不受限檔案上傳",
+    "owasp": "A04:2021-Insecure Design",
+    "severity": "HIGH",
+    "applicable_languages": [
+      "python",
+      "javascript",
+      "typescript",
+      "php",
+      "java",
+      "csharp"
+    ],
+    "description_zh": "以未驗證的原始檔名/型別儲存上傳檔案，可上傳惡意腳本或 webshell",
+    "reference": "https://cwe.mitre.org/data/definitions/434.html"
+  },
+  "CWE-20": {
+    "name_en": "Improper Input Validation",
+    "name_zh": "輸入驗證不當",
+    "owasp": "A03:2021-Injection",
+    "severity": "MEDIUM",
+    "applicable_languages": [
+      "python",
+      "javascript",
+      "typescript",
+      "php",
+      "java",
+      "c",
+      "cpp",
+      "csharp"
+    ],
+    "description_zh": "未對輸入做適當驗證，衍生多種下游風險",
+    "reference": "https://cwe.mitre.org/data/definitions/20.html"
+  },
+  "CWE-770": {
+    "name_en": "Allocation of Resources Without Limits",
+    "name_zh": "資源分配未設限",
+    "owasp": "A04:2021-Insecure Design",
+    "severity": "MEDIUM",
+    "applicable_languages": [
+      "python",
+      "javascript",
+      "typescript",
+      "php",
+      "java",
+      "c",
+      "cpp",
+      "csharp"
+    ],
+    "description_zh": "依使用者輸入無上限地配置資源，可致 DoS（如 Zip Bomb）",
+    "reference": "https://cwe.mitre.org/data/definitions/770.html"
+  },
+  "CWE-476": {
+    "name_en": "NULL Pointer Dereference",
+    "name_zh": "空指標解參考",
+    "owasp": "A06:2021-Vulnerable and Outdated Components",
+    "severity": "MEDIUM",
+    "applicable_languages": [
+      "c",
+      "cpp",
+      "java"
+    ],
+    "description_zh": "對可能為 null 的物件呼叫方法/存取屬性，導致崩潰（高階語言中風險較低）",
+    "reference": "https://cwe.mitre.org/data/definitions/476.html"
+  },
+  "CWE-120": {
+    "name_en": "Buffer Copy without Checking Size",
+    "name_zh": "緩衝區複製未檢查大小",
+    "owasp": "A06:2021-Vulnerable and Outdated Components",
+    "severity": "HIGH",
+    "applicable_languages": [
+      "c",
+      "cpp"
+    ],
+    "description_zh": "記憶體複製未檢查來源長度，經典緩衝區溢位（僅 C/C++）",
+    "reference": "https://cwe.mitre.org/data/definitions/120.html"
+  },
+  "CWE-121": {
+    "name_en": "Stack-based Buffer Overflow",
+    "name_zh": "堆疊緩衝區溢位",
+    "owasp": "A06:2021-Vulnerable and Outdated Components",
+    "severity": "HIGH",
+    "applicable_languages": [
+      "c",
+      "cpp"
+    ],
+    "description_zh": "寫入超出堆疊配置邊界（僅 C/C++）",
+    "reference": "https://cwe.mitre.org/data/definitions/121.html"
+  },
+  "CWE-122": {
+    "name_en": "Heap-based Buffer Overflow",
+    "name_zh": "堆積緩衝區溢位",
+    "owasp": "A06:2021-Vulnerable and Outdated Components",
+    "severity": "HIGH",
+    "applicable_languages": [
+      "c",
+      "cpp"
+    ],
+    "description_zh": "寫入超出堆積配置邊界（僅 C/C++）",
+    "reference": "https://cwe.mitre.org/data/definitions/122.html"
+  },
+  "CWE-125": {
+    "name_en": "Out-of-bounds Read",
+    "name_zh": "越界讀取",
+    "owasp": "A06:2021-Vulnerable and Outdated Components",
+    "severity": "HIGH",
+    "applicable_languages": [
+      "c",
+      "cpp"
+    ],
+    "description_zh": "讀取超出配置緩衝區邊界的記憶體（僅 C/C++）",
+    "reference": "https://cwe.mitre.org/data/definitions/125.html"
+  },
+  "CWE-787": {
+    "name_en": "Out-of-bounds Write",
+    "name_zh": "越界寫入",
+    "owasp": "A06:2021-Vulnerable and Outdated Components",
+    "severity": "CRITICAL",
+    "applicable_languages": [
+      "c",
+      "cpp"
+    ],
+    "description_zh": "寫入超出配置緩衝區邊界的記憶體（僅 C/C++）",
+    "reference": "https://cwe.mitre.org/data/definitions/787.html"
+  },
+  "CWE-416": {
+    "name_en": "Use After Free",
+    "name_zh": "釋放後使用",
+    "owasp": "A06:2021-Vulnerable and Outdated Components",
+    "severity": "CRITICAL",
+    "applicable_languages": [
+      "c",
+      "cpp"
+    ],
+    "description_zh": "釋放記憶體後又存取該位址（僅 C/C++）",
+    "reference": "https://cwe.mitre.org/data/definitions/416.html"
+  },
+  "CWE-912": {
+    "name_en": "Hidden Functionality",
+    "name_zh": "隱藏功能（後門）",
+    "owasp": "A04:2021-Insecure Design",
+    "severity": "CRITICAL",
+    "applicable_languages": [
+      "python",
+      "javascript",
+      "typescript",
+      "php",
+      "java",
+      "c",
+      "cpp",
+      "csharp"
+    ],
+    "description_zh": "程式中存在未公開的隱藏功能或後門，可繞過正常控制流程",
+    "reference": "https://cwe.mitre.org/data/definitions/912.html"
+  },
+  "CWE-829": {
+    "name_en": "Inclusion of Functionality from Untrusted Control Sphere",
+    "name_zh": "引入不受信任來源的功能",
+    "owasp": "A08:2021-Software and Data Integrity Failures",
+    "severity": "HIGH",
+    "applicable_languages": [
+      "python",
+      "javascript",
+      "typescript",
+      "php",
+      "java",
+      "csharp"
+    ],
+    "description_zh": "引入來源不可信的套件、模組或遠端程式碼（如 typosquatting、供應鏈攻擊）",
+    "reference": "https://cwe.mitre.org/data/definitions/829.html"
+  },
+  "CWE-327": {
+    "name_en": "Use of a Broken or Risky Cryptographic Algorithm",
+    "name_zh": "使用已破解或高風險的加密演算法",
+    "owasp": "A02:2021-Cryptographic Failures",
+    "severity": "HIGH",
+    "applicable_languages": [
+      "python",
+      "javascript",
+      "typescript",
+      "php",
+      "java",
+      "csharp",
+      "c",
+      "cpp",
+      "go"
+    ],
+    "description_zh": "使用 DES、3DES、RC4、Blowfish 等已被證實不安全的加密演算法，或使用 ECB 這類不具語意安全性的工作模式。應改用 AES-GCM、ChaCha20-Poly1305 等現代演算法。",
+    "reference": "https://cwe.mitre.org/data/definitions/327.html"
+  },
+  "CWE-326": {
+    "name_en": "Inadequate Encryption Strength",
+    "name_zh": "加密強度不足",
+    "owasp": "A02:2021-Cryptographic Failures",
+    "severity": "HIGH",
+    "applicable_languages": [
+      "python",
+      "javascript",
+      "typescript",
+      "php",
+      "java",
+      "csharp",
+      "c",
+      "cpp",
+      "go"
+    ],
+    "description_zh": "雖使用了正確的加密演算法，但金鑰長度過短（如 DES 的 56 位元、RSA 小於 2048 位元），現代運算能力可在合理時間內暴力破解。",
+    "reference": "https://cwe.mitre.org/data/definitions/326.html"
+  },
+  "CWE-916": {
+    "name_en": "Use of Password Hash With Insufficient Computational Effort",
+    "name_zh": "密碼雜湊運算強度不足",
+    "owasp": "A02:2021-Cryptographic Failures",
+    "severity": "HIGH",
+    "applicable_languages": [
+      "python",
+      "javascript",
+      "typescript",
+      "php",
+      "java",
+      "csharp",
+      "go"
+    ],
+    "description_zh": "使用 MD5、SHA-1 等快速雜湊函式儲存密碼，未採用 bcrypt、scrypt、Argon2 等具運算成本的密碼雜湊演算法，易遭彩虹表與暴力破解。",
+    "reference": "https://cwe.mitre.org/data/definitions/916.html"
+  },
+  "CWE-287": {
+    "name_en": "Improper Authentication",
+    "name_zh": "身分驗證不當",
+    "owasp": "A07:2021-Identification and Authentication Failures",
+    "severity": "CRITICAL",
+    "applicable_languages": [
+      "python",
+      "javascript",
+      "typescript",
+      "php",
+      "java",
+      "c",
+      "cpp",
+      "csharp"
+    ],
+    "description_zh": "應用程式在執行涉及敏感資料或特權操作的功能前，未正確執行身分驗證機制，或對憑證的驗證過於薄弱，導致攻擊者得以繞過認證程序、冒充合法使用者或直接取得系統控制權",
+    "reference": "https://cwe.mitre.org/data/definitions/287.html"
+  },
+  "CWE-269": {
+    "name_en": "Improper Privilege Management",
+    "name_zh": "權限管理不當",
+    "owasp": "A01:2021-Broken Access Control",
+    "severity": "HIGH",
+    "applicable_languages": [
+      "python",
+      "javascript",
+      "typescript",
+      "php",
+      "java",
+      "c",
+      "cpp",
+      "csharp"
+    ],
+    "description_zh": "應用程式未正確管理、限制或指派使用者、角色或處理程序的執行特權，導致低權限的主體得以逾越安全限制，取得未授權的高階特權，或執行特定管理員等級的特權操作（即垂直越權漏洞）",
+    "reference": "https://cwe.mitre.org/data/definitions/269.html"
+  },
+  "CWE-119": {
+    "name_en": "Improper Restriction of Operations within the Bounds of a Memory Buffer",
+    "name_zh": "記憶體緩衝區邊界內操作限制不當",
+    "owasp": "A08:2021-Software and Data Integrity Failures",
+    "severity": "CRITICAL",
+    "applicable_languages": [
+      "c",
+      "cpp"
+    ],
+    "description_zh": "應用程式在對記憶體緩衝區進行操作時，未正確限制或驗證其操作邊界，導致程式碼可以存取或竄改該緩衝區預期範圍之外的記憶體空間，進而引發系統異常崩潰、敏感資訊外洩或遠端執行任意程式碼（RCE）",
+    "reference": "https://cwe.mitre.org/data/definitions/119.html"
+  },
+  "CWE-190": {
+    "name_en": "Integer Overflow or Wraparound",
+    "name_zh": "整數溢位或繞回",
+    "owasp": "A08:2021-Software and Data Integrity Failures",
+    "severity": "HIGH",
+    "applicable_languages": [
+      "python",
+      "javascript",
+      "typescript",
+      "php",
+      "java",
+      "c",
+      "cpp",
+      "csharp"
+    ],
+    "description_zh": "應用程式在進行整數數學運算時，未驗證輸入值或運算結果是否超出該資料型態所能表示的最大或最小值，導致數值發生繞回而變成極小值、零或負數。此錯誤常導致後續的計數器失效、迴圈出錯，或因錯誤的記憶體配置大小而間接引發緩衝區溢位",
+    "reference": "https://cwe.mitre.org/data/definitions/190.html"
+  },
+  "CWE-400": {
+    "name_en": "Uncontrolled Resource Consumption",
+    "name_zh": "未受控制的資源消耗",
+    "owasp": "A05:2021-Security Misconfiguration",
+    "severity": "MEDIUM",
+    "applicable_languages": [
+      "python",
+      "javascript",
+      "typescript",
+      "php",
+      "java",
+      "c",
+      "cpp",
+      "csharp"
+    ],
+    "description_zh": "應用程式在處理大量請求、複雜運算或檔案輸入時，未正確限制、調節或控管各項硬體與軟體資源的消耗，導致攻擊者可透過刻意設計的惡意請求耗盡系統資源，引發應用程式停擺或阻斷服務（DoS）",
+    "reference": "https://cwe.mitre.org/data/definitions/400.html"
+  }
+}

@@ -1,0 +1,54 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.env
+.venv/
+
+# 模型權重（檔案太大，不推上去）
+detection/models/
+detection/dataset/
+detection/dataset_v2/
+dataset_v3/
+detection/outputs/*
+!detection/outputs/counter.json
+!detection/outputs/.gitkeep
+
+raw_datasets/
+
+# Kaggle
+.kaggle/
+
+# conda / venv
+*.egg-info/
+dist/
+build/
+
+# VS Code
+.vscode/
+
+# 系統檔
+.DS_Store
+Thumbs.db
+
+!.gitkeep
+
+dataset_v4/
+
+reviewer/models/
+
+reviewer/dataset/
+reviewer/models/
+
+reviewer/semgrep_test_results.py
+
+# ── 不公開：個人 / 推甄 / 內部筆記（保留本機，不進 repo）──
+reviewer/PRESENTATION_NOTES.md
+reviewer/RETRAIN_PLAN.md
+reviewer/docs/bench_analysis_after.md
+reviewer/docs/bench_analysis_baseline.md
+reviewer/docs/proposal_v4_weak_categories.md
+reviewer/*.html
+
+# ── 不公開：測試/資料集（含測試用假憑證，保留本機，不進 repo）──
+reviewer/test_code/

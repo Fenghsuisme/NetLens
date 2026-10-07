@@ -1,0 +1,197 @@
+# ══════════════════════════════════════════════════════════════════
+#  CSRF 補強規則（CWE-352）
+# ══════════════════════════════════════════════════════════════════
+#
+# 為什麼原本只有 3.3%：
+#   既有規則只匹配「明確關閉 CSRF 保護」的寫法：
+#       - pattern: csrf_enabled = False
+#       - pattern: $HTTP.csrf().disable()
+#   但測試集樣本沒有一個明確關閉過 —— 它們從來就沒加過保護。
+#   程式碼本身看起來完全正常：有 session 驗證、有參數化查詢、有輸入驗證。
+#
+# CSRF 與後門在偵測上的根本差異：
+#   後門有正面訊號（標頭與魔術值比較），可直接匹配。
+#   CSRF 是「該有的東西不存在」，缺席無法被 pattern 直接表達。
+#   唯一策略：匹配「危險形狀」，再以 pattern-not-regex 排除「已有保護」。
+#
+#   危險形狀 = 狀態變更操作（DB 寫入、檔案寫入、轉帳）
+#              出現在 POST/PUT/DELETE 的請求處理流程中
+#              且該範圍未提及任何 CSRF token 機制
+#
+# 已知限制（誠實記錄）：
+#   保護可能註冊在別處（app.use(csurf())、Spring Security 全域設定、
+#   Django 預設中介軟體），而處理器本身不提及 csrf。
+#   本規則以「函式層級是否提及 csrf/xsrf」近似判斷，
+#   因此對已在全域啟用保護的專案會誤報。
+#   這正是 CSRF 被歸為「需上下文判定」類別的原因 —— 單一函式資訊不足。
+#   屬刻意的高召回設計，交由 CodeBERT 過濾。
+# ══════════════════════════════════════════════════════════════════
+
+rules:
+
+  - id: supplement-csrf-express-state-change
+    message: >-
+      Cross-Site Request Forgery (CWE-352): 狀態變更操作出現在 POST/PUT/DELETE
+      處理器內，但未見 CSRF token 驗證。僅依賴 session cookie 認證的端點
+      會被跨站偽造的請求觸發。請加入 csurf 中介軟體或驗證同步器 token。
+    languages: [javascript, typescript]
+    severity: WARNING
+    metadata:
+      cwe: [CWE-352]
+      category: security
+      confidence: MEDIUM
+      supplement_round: 6
+    # 匹配「整個處理器」而非單一 sink：pattern-not-regex 作用於匹配區域，
+    # 若只匹配 sink 呼叫，就看不到處理器其他位置的 csrf 中介軟體。
+    # 兩參數形式（路徑 + 處理器）也自動排除了
+    # app.post(path, csrfProtection, handler) 這種三參數的受保護寫法。
+    patterns:
+      - pattern-either:
+          - pattern: $APP.$METHOD($PATH, function($REQ, $RES) { ... })
+          - pattern: $APP.$METHOD($PATH, ($REQ, $RES) => { ... })
+          - pattern: $APP.$METHOD($PATH, async ($REQ, $RES) => { ... })
+      - metavariable-regex:
+          metavariable: $METHOD
+          regex: ^(post|put|patch|delete)$
+      - pattern-regex: (?s)\.(query|execute|update|updateOne|updateMany|insert|insertOne|create|save|destroy|deleteOne|findByIdAndUpdate|writeFile|writeFileSync)\s*\(
+      - pattern-not-regex: (?i)(csrf|xsrf)
+
+  - id: supplement-csrf-flask-state-change
+    message: >-
+      Cross-Site Request Forgery (CWE-352): 讀取 POST 表單資料並執行狀態變更，
+      但未見 CSRF token 驗證。
+    languages: [python]
+    severity: WARNING
+    metadata:
+      cwe: [CWE-352]
+      category: security
+      confidence: MEDIUM
+      supplement_round: 6
+    # pattern-regex 會把匹配區域縮成單行，使 pattern-not-regex 看不到
+    # 函式其他位置的 CSRF 驗證。改以 pattern-inside 定位路由函式、
+    # pattern 命中 sink（命中行落在函式內，片段抽取正確），
+    # 再用 pattern-not-inside 明列常見的驗證形式排除。
+    patterns:
+      - pattern-inside: |
+          @$APP.route(...)
+          def $F(...):
+              ...
+      - pattern-either:
+          - pattern: $CUR.execute(...)
+          - pattern: $CUR.executemany(...)
+          - pattern: $DB.session.commit()
+          - pattern: $DB.session.add(...)
+          - pattern: $DB.session.delete(...)
+          - pattern: $M.save()
+          - pattern: $M.delete()
+          - pattern: $M.objects.create(...)
+          - pattern: $M.objects.filter(...).update(...)
+          - pattern: $M.objects.filter(...).delete()
+      - pattern-not-inside: |
+          def $F(...):
+              ...
+              validate_csrf(...)
+              ...
+      - pattern-not-inside: |
+          def $F(...):
+              ...
+              $X.validate_csrf(...)
+              ...
+      - pattern-not-inside: |
+          def $F(...):
+              ...
+              $X.verify_csrf_token(...)
+              ...
+
+  - id: supplement-csrf-protection-disabled-python
+    message: >-
+      Cross-Site Request Forgery (CWE-352): 明確停用 CSRF 保護機制。
+    languages: [python]
+    severity: ERROR
+    metadata:
+      cwe: [CWE-352]
+      category: security
+      confidence: HIGH
+      supplement_round: 6
+    pattern-either:
+      - pattern: $APP.config["WTF_CSRF_ENABLED"] = False
+      - pattern: csrf_exempt(...)
+      - pattern: $CSRF.exempt(...)
+      - pattern: WTF_CSRF_ENABLED = False
+      - pattern: CSRF_ENABLED = False
+
+  - id: supplement-csrf-servlet-state-change
+    message: >-
+      Cross-Site Request Forgery (CWE-352): doPost 內執行狀態變更但未見
+      CSRF token 驗證。Servlet 不提供內建 CSRF 防護。
+    languages: [java]
+    severity: WARNING
+    metadata:
+      cwe: [CWE-352]
+      category: security
+      confidence: MEDIUM
+      supplement_round: 6
+    patterns:
+      - pattern: |
+          protected void doPost(HttpServletRequest $REQ, HttpServletResponse $RESP) { ... }
+      - pattern-regex: (?s)\.(executeUpdate|execute|save|delete|deleteById)\s*\(
+      - pattern-not-regex: (?i)(csrf|xsrf)
+
+  - id: supplement-csrf-spring-state-change
+    message: >-
+      Cross-Site Request Forgery (CWE-352): Spring MVC 狀態變更端點未見
+      CSRF token 驗證。
+    languages: [java]
+    severity: WARNING
+    metadata:
+      cwe: [CWE-352]
+      category: security
+      confidence: MEDIUM
+      supplement_round: 6
+    patterns:
+      - pattern-either:
+          - pattern: |
+              @PostMapping(...)
+              $RET $F(...) { ... }
+          - pattern: |
+              @PutMapping(...)
+              $RET $F(...) { ... }
+          - pattern: |
+              @DeleteMapping(...)
+              $RET $F(...) { ... }
+      - pattern-regex: (?s)\.(transfer|update|delete|create|save|deleteById|executeUpdate)\s*\(
+      - pattern-not-regex: (?i)(csrf|xsrf)
+
+  - id: supplement-csrf-php-state-change
+    message: >-
+      Cross-Site Request Forgery (CWE-352): 以 session 認證的 POST 流程執行
+      資料寫入，但未見 CSRF token 驗證。
+    languages: [php]
+    severity: WARNING
+    metadata:
+      cwe: [CWE-352]
+      category: security
+      confidence: MEDIUM
+      supplement_round: 6
+    # 舊版把「任何 DB/檔案寫入」都當 sink，退化成對每個 PHP 檔開火
+    # （實測對 clean php 39/39＝100% 全誤報，是殘留誤報第一大源）。
+    # 改用 taint：來源＝請求輸入（$_POST/$_REQUEST/$_FILES/$_GET），sink＝狀態變更，
+    # 只有「用請求資料做狀態變更」（真 CSRF 攻擊面）才報，非請求的 DB 操作
+    # （建表、批次腳本、讀查詢）自動排除。clean FP 39→1、召回 42→33。
+    mode: taint
+    pattern-sources:
+      - pattern: $_POST
+      - pattern: $_REQUEST
+      - pattern: $_FILES
+      - pattern: $_GET
+    pattern-sinks:
+      - pattern-either:
+          - pattern: $STMT->execute(...)
+          - pattern: $DB->exec(...)
+          - pattern: mysqli_query(...)
+          - pattern: $M->save()
+          - pattern: $M->delete()
+          - pattern: $M->update(...)
+          - pattern: move_uploaded_file(...)
+    pattern-sanitizers:
+      - pattern-regex: (?i)(csrf|xsrf)

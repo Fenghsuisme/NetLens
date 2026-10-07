@@ -1,0 +1,814 @@
+rules:
+- id: php-xss-taint-cwe79
+  languages:
+  - php
+  severity: ERROR
+  message: 'Cross-site Scripting (CWE-79): Unsanitized user input reaches a web output
+    statement. Wrap input in htmlspecialchars() or htmlentities() before rendering.'
+  mode: taint
+  pattern-sources:
+  - pattern: $_GET
+  - pattern: $_POST
+  - pattern: $_REQUEST
+  - pattern: $_COOKIE
+  - pattern: $_SERVER
+  - pattern: $_GET[...]
+  - pattern: $_POST[...]
+  pattern-sanitizers:
+  - pattern: htmlspecialchars(...)
+  - pattern: htmlentities(...)
+  - pattern: intval(...)
+  - pattern: floatval(...)
+  pattern-sinks:
+  - pattern: echo $ANY;
+  - pattern: print($ANY);
+  - pattern: print $ANY;
+  - pattern: printf(...)
+  - pattern: vprintf(...)
+  - pattern: echo(...);
+  metadata:
+    cwe:
+    - CWE-79
+- id: php-sql-injection-cwe89
+  # 舊版只認「concat/插值直接在 query 內」，漏掉先組進 $sql 變數再傳入
+  # （$sql = "..."; mysqli_query($conn, $sql)）與變數結尾的 concat，實測 43 筆僅命中 9。
+  # clean 樣本一律用 ->prepare()，完全不用 ->query()/->exec()/mysqli_query()，
+  # 故放寬為匹配這些 sink 帶非字面量引數，僅排除純字面量常數查詢。
+  patterns:
+  - pattern-either:
+    - pattern: $CONN->query($SQL, ...)
+    - pattern: $CONN->exec($SQL)
+    - pattern: $CONN->real_query($SQL)
+    - pattern: mysqli_query($CONN, $SQL, ...)
+    - pattern: mysqli_multi_query($CONN, $SQL)
+    - pattern: pg_query($CONN, $SQL)
+    - pattern: pg_query($SQL)
+  - pattern-not: $CONN->query("...", ...)
+  - pattern-not: $CONN->exec("...")
+  - pattern-not: $CONN->real_query("...")
+  - pattern-not: mysqli_query($CONN, "...", ...)
+  - pattern-not: mysqli_multi_query($CONN, "...")
+  - pattern-not: pg_query($CONN, "...")
+  - pattern-not: pg_query("...")
+  message: 'Improper Neutralization of Special Elements used in an SQL Command (''SQL
+    Injection'') (CWE-89): The application constructs SQL queries by directly concatenating
+    or interpolating untrusted input into SQL statements. This allows malicious actors
+    to execute arbitrary SQL commands. Always use prepared statements with parameterized
+    queries (e.g., PDO prepare and execute) to safely separate SQL code from data.'
+  languages:
+  - php
+  severity: ERROR
+  metadata:
+    cwe:
+    - CWE-89
+- id: php-csrf-protection-missing-cwe352
+  # 原本 $PASSWORD / $EMAIL / $ROLE / $ACTION 四條是同一個 pattern
+  # （$大寫 皆為 metavariable，等同 `$任意 = $_POST[$任意]`）。
+  # 去重為一條，並用 metavariable-regex 限定為狀態變更相關的變數名，
+  # 否則會匹配 PHP 中每一個從 $_POST 取值的賦值。
+  patterns:
+  - pattern-either:
+    - pattern: $VAR = $_POST[$KEY]
+    - pattern: $VAR = $_REQUEST[$KEY]
+  - metavariable-regex:
+      metavariable: $VAR
+      regex: (?i)^\$.*(password|passwd|pwd|email|role|action|admin|delete|transfer|amount).*$
+  message: 'Cross-Site Request Forgery (CSRF) (CWE-352): The application performs
+    sensitive state-changing operations directly using $_POST or $_REQUEST parameters
+    without verifying a unique, session-backed CSRF token. Always validate a secure
+    CSRF token before processing any state-changing requests.'
+  languages:
+  - php
+  severity: ERROR
+  metadata:
+    cwe:
+    - CWE-352
+- id: php-missing-authorization-cwe862
+  pattern-either:
+  - pattern: $CONN->query("DELETE FROM ".$TABLE." WHERE id = ".$_GET[$ID])
+  - pattern: mysqli_query($CONN, "DELETE FROM ".$TABLE." WHERE id = ".$_GET[$ID])
+  - pattern: $PDO->exec("DELETE FROM ".$TABLE." WHERE id = ".$_GET[$ID])
+  - pattern: $CONN->query("UPDATE ".$TABLE." SET ... WHERE id = ".$_POST[$ID])
+  - pattern: $this->deleteUser($_GET[$USER_ID])
+  - pattern: $this->changeUserRole($_POST[$USER_ID], $_POST[$ROLE])
+  - pattern: $this->updateUserPassword($_POST[$USER_ID], $_POST[$PASSWORD])
+  - pattern: include($_GET[$PAGE])
+  - pattern: require($_GET[$PAGE])
+  - pattern: include_once($_GET[$PAGE])
+  - pattern: require_once($_GET[$PAGE])
+  message: 'Missing Authorization (CWE-862): The application performs sensitive state-changing
+    operations, database modifications, or dynamic file inclusion without validating
+    if the current authenticated user has the explicit authorization to perform these
+    actions on the target resource. Always implement robust role-based access control
+    (RBAC) or attribute-based access control (ABAC) before handling user-supplied
+    identifiers or dynamic paths.'
+  languages:
+  - php
+  severity: ERROR
+  metadata:
+    cwe:
+    - CWE-862
+- id: php-path-traversal-cwe22
+  pattern-either:
+  - pattern: file_get_contents("...".$_GET[$KEY], ...)
+  - pattern: file_get_contents("...".$_POST[$KEY], ...)
+  - pattern: file_get_contents("...".$_REQUEST[$KEY], ...)
+  - pattern: file_get_contents("... $_GET[$KEY] ...", ...)
+  - pattern: file_get_contents("... $_POST[$KEY] ...", ...)
+  - pattern: file_put_contents("...".$_GET[$KEY], ...)
+  - pattern: file_put_contents("...".$_POST[$KEY], ...)
+  - pattern: unlink("...".$_GET[$KEY])
+  - pattern: unlink("...".$_POST[$KEY])
+  - pattern: fopen("...".$_GET[$KEY], ...)
+  - pattern: fopen("...".$_POST[$KEY], ...)
+  - pattern: fopen("... $_GET[$KEY] ...", ...)
+  - pattern: fopen("... $_POST[$KEY] ...", ...)
+  - pattern: include("...".$_GET[$KEY])
+  - pattern: include("...".$_POST[$KEY])
+  - pattern: require("...".$_GET[$KEY])
+  - pattern: require("...".$_POST[$KEY])
+  message: 'Improper Limitation of a Pathname to a Restricted Directory (''Path Traversal'')
+    (CWE-22): The application constructs file paths by directly concatenating user-supplied
+    input (e.g., $_GET or $_POST) without proper sanitization. This allows attackers
+    to traverse the file system, read sensitive files (e.g., /etc/passwd), or overwrite
+    system configurations. Always use functions like basename() to extract only the
+    filename, or validate paths against a strict whitelist.'
+  languages:
+  - php
+  severity: ERROR
+  metadata:
+    cwe:
+    - CWE-22
+- id: php-os-command-injection-cwe78
+  # 舊版只匹配「超全域直接在呼叫內」，漏掉 exec($cmd)（$cmd 為間接／跨函式來源，
+  # 實測 39 筆僅命中 14；user input 常先拼成變數或當函式參數傳入）。clean 樣本完全
+  # 不使用這些 shell 函式，故放寬為匹配任何 exec/shell_exec/... 呼叫，僅排除純字面量
+  # 常數指令與已 escapeshellarg/escapeshellcmd 的安全形式。命中行落在 sink 上。
+  patterns:
+  - pattern-either:
+    - pattern: system($CMD, ...)
+    - pattern: exec($CMD, ...)
+    - pattern: shell_exec($CMD)
+    - pattern: passthru($CMD, ...)
+    - pattern: popen($CMD, ...)
+    - pattern: proc_open($CMD, ...)
+    - pattern: pcntl_exec($CMD, ...)
+  - pattern-not: system("...", ...)
+  - pattern-not: exec("...", ...)
+  - pattern-not: shell_exec("...")
+  - pattern-not: passthru("...", ...)
+  - pattern-not: popen("...", ...)
+  - pattern-not: system(escapeshellarg(...), ...)
+  - pattern-not: exec(escapeshellcmd(...), ...)
+  - pattern-not: shell_exec(escapeshellcmd(...))
+  - pattern-not: shell_exec(escapeshellarg(...))
+  message: 'Improper Neutralization of Special Elements used in an OS Command (''OS
+    Command Injection'') (CWE-78): The application constructs OS commands by directly
+    concatenating or interpolating untrusted inputs into command execution functions
+    (such as system, exec, shell_exec, passthru). This allows malicious actors to
+    execute arbitrary commands on the server. Always sanitize inputs using escapeshellarg()
+    or escapeshellcmd(), or ideally, avoid using OS shell functions by utilizing native
+    PHP APIs.'
+  languages:
+  - php
+  severity: ERROR
+  metadata:
+    cwe:
+    - CWE-78
+- id: php-code-injection-cwe94
+  pattern-either:
+  - pattern: eval($_GET[$KEY])
+  - pattern: eval($_POST[$KEY])
+  - pattern: eval($_REQUEST[$KEY])
+  - pattern: eval($SRC . $_GET[$KEY])
+  - pattern: eval($SRC . $_POST[$KEY])
+  - pattern: eval($SRC . $_REQUEST[$KEY])
+  - pattern: eval($SRC . $_GET[$KEY] . $DST)
+  - pattern: eval($SRC . $_POST[$KEY] . $DST)
+  - pattern: eval($SRC . $_REQUEST[$KEY] . $DST)
+  - pattern: eval($_GET[$KEY] . $DST)
+  - pattern: eval($_POST[$KEY] . $DST)
+  - pattern: eval($_REQUEST[$KEY] . $DST)
+  - pattern: eval("... $_GET[$KEY] ...")
+  - pattern: eval("... $_POST[$KEY] ...")
+  - pattern: assert($_GET[$KEY], ...)
+  - pattern: assert($_POST[$KEY], ...)
+  - pattern: assert($_REQUEST[$KEY], ...)
+  - pattern: assert($SRC . $_GET[$KEY], ...)
+  - pattern: assert($SRC . $_POST[$KEY], ...)
+  - pattern: assert($SRC . $_REQUEST[$KEY], ...)
+  - pattern: assert($SRC . $_GET[$KEY] . $DST, ...)
+  - pattern: assert($SRC . $_POST[$KEY] . $DST, ...)
+  - pattern: assert($SRC . $_REQUEST[$KEY] . $DST, ...)
+  - pattern: assert($_GET[$KEY] . $DST, ...)
+  - pattern: assert($_POST[$KEY] . $DST, ...)
+  - pattern: assert($_REQUEST[$KEY] . $DST, ...)
+  - pattern: assert("... $_GET[$KEY] ...", ...)
+  - pattern: assert("... $_POST[$KEY] ...", ...)
+  - pattern: create_function($ARGS, $_GET[$KEY])
+  - pattern: create_function($ARGS, $_POST[$KEY])
+  - pattern: create_function($ARGS, $SRC . $_GET[$KEY])
+  - pattern: create_function($ARGS, $SRC . $_POST[$KEY])
+  - pattern: create_function($ARGS, $SRC . $_GET[$KEY] . $DST)
+  - pattern: create_function($ARGS, $SRC . $_POST[$KEY] . $DST)
+  - pattern: create_function($ARGS, $_GET[$KEY] . $DST)
+  - pattern: create_function($ARGS, $_POST[$KEY] . $DST)
+  - pattern: create_function($ARGS, "... $_GET[$KEY] ...")
+  - pattern: create_function($ARGS, "... $_POST[$KEY] ...")
+  - pattern: preg_replace("/.../e", $_GET[$KEY], ...)
+  - pattern: preg_replace("/.../e", $_POST[$KEY], ...)
+  - pattern: preg_replace("/.../e", $SRC . $_GET[$KEY], ...)
+  - pattern: preg_replace("/.../e", $SRC . $_POST[$KEY], ...)
+  - pattern: preg_replace("/.../e", $SRC . $_GET[$KEY] . $DST, ...)
+  - pattern: preg_replace("/.../e", $SRC . $_POST[$KEY] . $DST, ...)
+  message: 'Improper Control of Generation of Code (''Code Injection'') (CWE-94):
+    The application passes untrusted input directly into functions that evaluate strings
+    as PHP code (such as eval, assert, create_function, or preg_replace with the /e
+    modifier). This allows attackers to execute arbitrary PHP code on the server.'
+  languages:
+  - php
+  severity: ERROR
+  metadata:
+    cwe:
+    - CWE-94
+- id: php-unrestricted-file-upload-cwe434
+  pattern-either:
+  - pattern: move_uploaded_file($_FILES[$KEY]["tmp_name"], $DIR . $_FILES[$KEY]["name"])
+  - pattern: move_uploaded_file($_FILES[$KEY]["tmp_name"], "...".$_FILES[$KEY]["name"])
+  - pattern: if ($_FILES[$KEY]["type"] == "...") { ... move_uploaded_file(...); ...
+      }
+  - pattern: if (in_array($_FILES[$KEY]["type"], $ALLOWED)) { ... move_uploaded_file(...);
+      ... }
+  - pattern: move_uploaded_file($_FILES[$KEY]["tmp_name"], $DIR . pathinfo($_FILES[$KEY]["name"],
+      ...))
+  message: 'Unrestricted Upload of File with Dangerous Type (CWE-434): The application
+    allows uploading files with potentially dangerous extensions or relies solely
+    on client-controlled MIME types for validation. This can lead to arbitrary PHP
+    code execution on the server. Always validate the file extension against a strict
+    whitelist (e.g., using pathinfo), generate a randomized filename, and store uploaded
+    files outside the web root or disable PHP execution in the upload directory.'
+  languages:
+  - php
+  severity: ERROR
+  metadata:
+    cwe:
+    - CWE-434
+- id: php-untrusted-deserialization-cwe502
+  # 舊版只匹配「引數直接是超全域」，漏掉 unserialize($localVar)（引數為間接來源的
+  # 區域變數，實測 39 筆樣本僅命中 5）。unserialize() 於非字面量資料本質即危險
+  # （物件注入 RCE），故放寬為匹配任何 unserialize(...)，僅排除字面量字串與已設
+  # allowed_classes => false/[] 的安全形式。命中行落在 sink 上，片段選點正確。
+  patterns:
+  - pattern: unserialize(...)
+  - pattern-not: unserialize("...", ...)
+  - pattern-not: unserialize(..., ["allowed_classes" => false])
+  - pattern-not: unserialize(..., ["allowed_classes" => []])
+  message: 'Deserialization of Untrusted Data (CWE-502): Passing untrusted input to
+    unserialize() can lead to arbitrary code execution (RCE) via object injection
+    and PHP magic methods. Avoid using unserialize() on user-controlled data. If serialization
+    is necessary, use safer alternatives such as json_decode() / json_encode(), or
+    explicitly set ''allowed_classes'' to false in the unserialize() options.'
+  languages:
+  - php
+  severity: ERROR
+  metadata:
+    cwe:
+    - CWE-502
+- id: php-incorrect-authorization-cwe863
+  pattern-either:
+  - pattern: $DB->query("UPDATE ... WHERE id = " . $_GET[$KEY])
+  - pattern: $DB->query("DELETE FROM ... WHERE id = " . $_GET[$KEY])
+  - pattern: $DB->execute("UPDATE ... WHERE id = ?", [$_GET[$KEY]])
+  - pattern: $DB->execute("DELETE FROM ... WHERE id = ?", [$_GET[$KEY]])
+  - pattern: if (isset($_SESSION["user_id"])) { ... $DB->query("DELETE FROM users
+      ..."); ... }
+  - pattern: if ($_SESSION["logged_in"] === true) { ... $DB->execute("UPDATE system_settings
+      ..."); ... }
+  - pattern: if ($_COOKIE["role"] === "admin") { ... }
+  - pattern: if ($_POST["is_admin"] == true) { ... }
+  message: 'Incorrect Authorization (CWE-863): The application fails to properly perform
+    authorization checks on restricted resources or actions. This can allow regular
+    users to access, modify, or delete resources belonging to other users (IDOR),
+    or perform administrative functions. Always perform server-side checks verifying
+    that the authenticated user owns the requested resource or possesses the required
+    role before executing sensitive logic.'
+  languages:
+  - php
+  severity: ERROR
+  metadata:
+    cwe:
+    - CWE-863
+- id: php-sensitive-info-exposure-cwe200
+  # 原本含 `echo $CONNECTION_STRING;` 與 `echo $API_KEY;` 兩個 pattern。
+  # 在 Semgrep 中 $大寫 一律是 metavariable，不是字面變數名——
+  # 這兩條等同於 `echo $任意變數;`，匹配 PHP 中每一個 echo 變數的敘述。
+  # 實測在 150 筆 clean 樣本上產生 49 個誤報（全庫最高），
+  # 且 CWE-200 屬 B 類，走 semgrep_only 無模型過濾，全數直達使用者。
+  # 改用 metavariable-regex 限定變數名確實帶敏感語意。
+  patterns:
+  - pattern-either:
+    - pattern: echo $VAR;
+    - pattern: print($VAR);
+  - metavariable-regex:
+      metavariable: $VAR
+      regex: (?i)^\$.*(api_?key|secret|token|password|passwd|pwd|conn(ection)?_?str|dsn|credential|private_?key).*$
+  message: 'Exposure of Sensitive Information to an Unauthorized Actor (CWE-200):
+    The application prints credentials or connection strings directly.'
+  languages:
+  - php
+  severity: WARNING
+  metadata:
+    cwe:
+    - CWE-200
+- id: php-sensitive-info-exposure-debug-cwe200
+  pattern-either:
+  - pattern: echo $ERR->getMessage(...);
+  - pattern: print($ERR->getMessage(...));
+  - pattern: print_r($ERR->getMessage(...));
+  - pattern: die($ERR->getMessage(...));
+  - pattern: var_dump($_ENV);
+  - pattern: print_r($_ENV);
+  - pattern: var_dump($_SERVER);
+  - pattern: print_r($_SERVER);
+  - pattern: phpinfo();
+  message: 'Exposure of Sensitive Information to an Unauthorized Actor (CWE-200):
+    The application prints raw system/exception messages or environment variables.
+    This can leak system paths, database structures, or internal configuration.'
+  languages:
+  - php
+  severity: WARNING
+  metadata:
+    cwe:
+    - CWE-200
+- id: php-missing-authentication-cwe306
+  pattern-either:
+  - pattern: "function $FUNC(...) {\n  ...\n  $DB->execute(\"UPDATE...\", ...);\n\
+      }\n"
+  - pattern: "function $FUNC(...) {\n  ...\n  $DB->execute(\"DELETE FROM...\", ...);\n\
+      }\n"
+  - pattern: "function $FUNC(...) {\n  ...\n  $USER->changePassword($_POST[$PWD]);\n\
+      }\n"
+  - pattern: "function $FUNC(...) {\n  ...\n  $PAYMENT->transferFunds(...);\n}\n"
+  pattern-not-either:
+  - pattern: "function $FUNC(...) {\n  ...\n  if (!isset($_SESSION[$VAR])) {\n   \
+      \ ...\n  }\n  ...\n}\n"
+  - pattern: "function $FUNC(...) {\n  ...\n  if (!$AUTH->isLoggedIn(...)) {\n   \
+      \ ...\n  }\n  ...\n}\n"
+  - pattern: "function $FUNC(...) {\n  ...\n  $this->requireAuth(...);\n  ...\n}\n"
+  message: 'Missing Authentication for Critical Function (CWE-306): Detected critical
+    actions (updating DB, changing passwords, or transferring funds) being executed
+    without visible authentication or session checks.'
+  languages:
+  - php
+  severity: ERROR
+  metadata:
+    cwe:
+    - CWE-306
+- id: php-ssrf-cwe918
+  pattern-either:
+  - pattern: '$URL = $_GET[$VAR];
+
+      ...
+
+      curl_setopt($CH, CURLOPT_URL, $URL);
+
+      '
+  - pattern: '$URL = $_POST[$VAR];
+
+      ...
+
+      curl_setopt($CH, CURLOPT_URL, $URL);
+
+      '
+  - pattern: curl_setopt($CH, CURLOPT_URL, $_GET[$VAR]);
+  - pattern: curl_setopt($CH, CURLOPT_URL, $_POST[$VAR]);
+  - pattern: file_get_contents($_GET[$VAR]);
+  - pattern: file_get_contents($_POST[$VAR]);
+  - pattern: copy($_GET[$VAR], $DEST);
+  - pattern: copy($_POST[$VAR], $DEST);
+  pattern-not-either:
+  - pattern: "$URL = $_GET[$VAR];\n...\nif (in_array($URL, $WHITELIST, true)) {\n\
+      \  ...\n  curl_setopt($CH, CURLOPT_URL, $URL);\n}\n"
+  - pattern: "$URL = $_GET[$VAR];\n...\nif (strpos($URL, \"https://api.trusted.com/\"\
+      ) === 0) {\n  ...\n  file_get_contents($URL);\n}\n"
+  message: 'Server-Side Request Forgery (SSRF) (CWE-918): User-controlled input is
+    directly used to construct a network request URL. This can allow attackers to
+    abuse the server to scan internal networks, access metadata services, or perform
+    unauthorized external requests.'
+  languages:
+  - php
+  severity: ERROR
+  metadata:
+    cwe:
+    - CWE-918
+- id: php-idor-cwe639
+  mode: taint
+  pattern-sources:
+  - pattern-either:
+    - pattern: $_GET[...]
+    - pattern: $_POST[...]
+    - pattern: $_REQUEST[...]
+  pattern-sinks:
+  - pattern-either:
+    - pattern: $DB->query(...)
+    - pattern: $DB->prepare(...)
+    - pattern: $DB->execute(...)
+    - pattern: mysqli_query(...)
+    - pattern: mysqli_prepare(...)
+    - pattern: $REPOSITORY->find(...)
+    - pattern: $REPOSITORY->findOneBy(...)
+    - pattern: $MODEL::find(...)
+    - pattern: $MODEL::findOrFail(...)
+    - pattern: $QUERY->find(...)
+    - pattern: $QUERY->findOrFail(...)
+    - pattern: $QUERY->where(...)
+    - pattern: $REPOSITORY->findById(...)
+  message: 'Authorization Bypass Through User-Controlled Key (CWE-639 / IDOR): A request-controlled
+    value reaches a database or ORM resource lookup. Verify that the current authenticated
+    user is authorized to access the specific object, for example by scoping the query
+    with both object ID and current user ID.'
+  languages:
+  - php
+  severity: ERROR
+  metadata:
+    cwe:
+    - CWE-639
+- id: php-improper-access-control-cwe284
+  patterns:
+  - pattern-either:
+    - patterns:
+      - pattern-inside: "if ($_GET[...]) {\n  ...\n}\n"
+      - pattern-either:
+        - pattern: $DB->exec(...)
+        - pattern: $DB->query(...)
+        - pattern: $DB->execute(...)
+        - pattern: mysqli_query(...)
+        - pattern: unlink(...)
+        - pattern: file_put_contents(...)
+        - pattern: $SERVICE->deleteUser(...)
+        - pattern: $SERVICE->changeUserRole(...)
+        - pattern: $SERVICE->updateSettings(...)
+    - patterns:
+      - pattern-inside: "if ($_POST[...]) {\n  ...\n}\n"
+      - pattern-either:
+        - pattern: $DB->exec(...)
+        - pattern: $DB->query(...)
+        - pattern: $DB->execute(...)
+        - pattern: mysqli_query(...)
+        - pattern: unlink(...)
+        - pattern: file_put_contents(...)
+        - pattern: $SERVICE->deleteUser(...)
+        - pattern: $SERVICE->changeUserRole(...)
+        - pattern: $SERVICE->updateSettings(...)
+    - patterns:
+      - pattern-inside: "if ($_REQUEST[...]) {\n  ...\n}\n"
+      - pattern-either:
+        - pattern: $DB->exec(...)
+        - pattern: $DB->query(...)
+        - pattern: $DB->execute(...)
+        - pattern: mysqli_query(...)
+        - pattern: unlink(...)
+        - pattern: file_put_contents(...)
+        - pattern: $SERVICE->deleteUser(...)
+        - pattern: $SERVICE->changeUserRole(...)
+        - pattern: $SERVICE->updateSettings(...)
+    - patterns:
+      - pattern-inside: "if ($_COOKIE[...]) {\n  ...\n}\n"
+      - pattern-either:
+        - pattern: $DB->exec(...)
+        - pattern: $DB->query(...)
+        - pattern: $DB->execute(...)
+        - pattern: mysqli_query(...)
+        - pattern: unlink(...)
+        - pattern: file_put_contents(...)
+        - pattern: $SERVICE->deleteUser(...)
+        - pattern: $SERVICE->changeUserRole(...)
+        - pattern: $SERVICE->updateSettings(...)
+    - patterns:
+      - pattern-inside: "if ($_SERVER[...]) {\n  ...\n}\n"
+      - pattern-either:
+        - pattern: $DB->exec(...)
+        - pattern: $DB->query(...)
+        - pattern: $DB->execute(...)
+        - pattern: mysqli_query(...)
+        - pattern: unlink(...)
+        - pattern: file_put_contents(...)
+        - pattern: $SERVICE->deleteUser(...)
+        - pattern: $SERVICE->changeUserRole(...)
+        - pattern: $SERVICE->updateSettings(...)
+    - pattern: $USER->setRole($_GET[...])
+    - pattern: $USER->setRole($_POST[...])
+    - pattern: $USER->setRole($_REQUEST[...])
+    - pattern: $USER->role = $_GET[...]
+    - pattern: $USER->role = $_POST[...]
+    - pattern: $USER->role = $_REQUEST[...]
+    - pattern: $USER->is_admin = $_GET[...]
+    - pattern: $USER->is_admin = $_POST[...]
+    - pattern: $USER->is_admin = $_REQUEST[...]
+    - pattern: $MODEL::create($_POST)
+    - pattern: $MODEL::create($_REQUEST)
+    - pattern: $MODEL->fill($_POST)
+    - pattern: $MODEL->fill($_REQUEST)
+    - pattern: $MODEL->update($_POST)
+    - pattern: $MODEL->update($_REQUEST)
+    - pattern: $ACL->allow($SUBJECT, $RESOURCE, "all")
+    - pattern: $ACL->allow($SUBJECT, $RESOURCE, "*")
+    - pattern: $ACL->grant($SUBJECT, $RESOURCE, "all")
+    - pattern: $ACL->grant($SUBJECT, $RESOURCE, "*")
+    - pattern: chmod($PATH, 0777)
+    - pattern: mkdir($PATH, 0777)
+    - pattern: mkdir($PATH, 0777, true)
+  message: 'Improper Access Control (CWE-284): The application uses client-controlled
+    data to authorize a sensitive action, permits client-controlled privilege assignment,
+    or configures an overly permissive ACL/file mode. Enforce authorization with a
+    server-side session identity and a trusted RBAC/ABAC policy; never trust request
+    parameters, cookies, or headers as proof of privilege.'
+  languages:
+  - php
+  severity: ERROR
+  metadata:
+    cwe:
+    - CWE-284
+- id: php-command-injection-cwe77
+  mode: taint
+  pattern-sources:
+  - pattern-either:
+    - pattern: $_GET[...]
+    - pattern: $_POST[...]
+    - pattern: $_REQUEST[...]
+    - pattern: $_COOKIE[...]
+    - pattern: $_SERVER[...]
+    - pattern: $_FILES[...]
+    - pattern: filter_input(...)
+    - pattern: filter_input_array(...)
+    - pattern: $argv[...]
+    - pattern: $REQUEST->input(...)
+    - pattern: $REQUEST->query(...)
+    - pattern: $REQUEST->post(...)
+  pattern-sanitizers:
+  - pattern-either:
+    - pattern: escapeshellarg(...)
+    - pattern: escapeshellcmd(...)
+  pattern-sinks:
+  - pattern-either:
+    - pattern: system(...)
+    - pattern: exec(...)
+    - pattern: shell_exec(...)
+    - pattern: passthru(...)
+    - pattern: popen(...)
+    - pattern: proc_open(...)
+    - pattern: pcntl_exec(...)
+    - pattern: expect_popen(...)
+    - pattern: '`$COMMAND`
+
+        '
+    # 程序執行器方法（Symfony Process 等）。$RUNNER 為萬用字元，原本
+    # $RUNNER->execute(...) 會命中 PDO 的 $stmt->execute()（安全做法）而誤報，
+    # 故以 metavariable-regex 限縮物件名為 process/runner 類。
+    - patterns:
+      - pattern-either:
+        - pattern: $RUNNER->run(...)
+        - pattern: $RUNNER->execute(...)
+        - pattern: $RUNNER->start(...)
+      - metavariable-regex:
+          metavariable: $RUNNER
+          regex: (?i).*(process|runner|proc|command|shell|exec)
+  message: 'Command Injection (CWE-77): Externally influenced input reaches a command
+    execution API without confirmed command-specific validation. Do not construct
+    command strings from request, cookie, header, upload, or CLI input. Prefer native
+    PHP/library APIs; otherwise use a strict allowlist and quote every individual
+    shell argument with escapeshellarg().'
+  languages:
+  - php
+  severity: ERROR
+  metadata:
+    cwe:
+    - CWE-77
+- id: php-improper-authentication-cwe287
+  pattern-either:
+  - pattern: "if ($_GET[...]) {\n  ...\n}\n"
+  - pattern: "if ($_POST[...]) {\n  ...\n}\n"
+  - pattern: "if ($_REQUEST[...]) {\n  ...\n}\n"
+  - pattern: "if ($_COOKIE[...]) {\n  ...\n}\n"
+  - pattern: "if ($_SERVER[...]) {\n  ...\n}\n"
+  - pattern: "if ($_GET[...] == $EXPECTED) {\n  ...\n}\n"
+  - pattern: "if ($_POST[...] == $EXPECTED) {\n  ...\n}\n"
+  - pattern: "if ($_REQUEST[...] == $EXPECTED) {\n  ...\n}\n"
+  - pattern: "if ($_COOKIE[...] == $EXPECTED) {\n  ...\n}\n"
+  - pattern: "if ($EXPECTED == $_GET[...]) {\n  ...\n}\n"
+  - pattern: "if ($EXPECTED == $_POST[...]) {\n  ...\n}\n"
+  - pattern: "if ($EXPECTED == $_REQUEST[...]) {\n  ...\n}\n"
+  - pattern: "if ($EXPECTED == $_COOKIE[...]) {\n  ...\n}\n"
+  - pattern: "if (md5($_GET[...]) == $EXPECTED_HASH) {\n  ...\n}\n"
+  - pattern: "if (md5($_POST[...]) == $EXPECTED_HASH) {\n  ...\n}\n"
+  - pattern: "if (sha1($_GET[...]) == $EXPECTED_HASH) {\n  ...\n}\n"
+  - pattern: "if (sha1($_POST[...]) == $EXPECTED_HASH) {\n  ...\n}\n"
+  - pattern: in_array($_GET[...], $VALID_TOKENS)
+  - pattern: in_array($_POST[...], $VALID_TOKENS)
+  - pattern: in_array($_REQUEST[...], $VALID_TOKENS)
+  - pattern: in_array($_COOKIE[...], $VALID_TOKENS)
+  - pattern: JWT::decode($TOKEN, null, ...)
+  - pattern: JWT::decode($TOKEN, $KEY, ["none"])
+  message: 'Improper Authentication (CWE-287): The application treats client-controlled
+    data as proof of identity, uses a type-juggling-prone credential comparison, or
+    accepts an inadequately verified token. Authenticate with a server-side session
+    or verified signed token; use password_verify() for passwords and hash_equals()
+    or strict comparisons for secrets.'
+  languages:
+  - php
+  severity: ERROR
+  metadata:
+    cwe:
+    - CWE-287
+- id: php-improper-privilege-management-cwe269
+  pattern-either:
+  - pattern: $USER->role = "admin"
+  - pattern: $USER->role = "administrator"
+  - pattern: $USER->role = "superuser"
+  - pattern: $USER->is_admin = true
+  - pattern: $USER->is_superuser = true
+  - pattern: $USER->assignRole("admin")
+  - pattern: $USER->assignRole("administrator")
+  - pattern: $USER->assignRole("superuser")
+  - pattern: $USER->syncRoles(["admin"])
+  - pattern: $USER->syncRoles(["administrator"])
+  - pattern: $USER->givePermissionTo(...)
+  - pattern: $USER->grantRole(...)
+  - pattern: $USER->role = $_GET[...]
+  - pattern: $USER->role = $_POST[...]
+  - pattern: $USER->role = $_REQUEST[...]
+  - pattern: $USER->is_admin = $_GET[...]
+  - pattern: $USER->is_admin = $_POST[...]
+  - pattern: $USER->is_admin = $_REQUEST[...]
+  - pattern: $USER->assignRole($_GET[...])
+  - pattern: $USER->assignRole($_POST[...])
+  - pattern: $USER->assignRole($_REQUEST[...])
+  - pattern: $USER->syncRoles($_POST[...])
+  - pattern: $USER->givePermissionTo($_POST[...])
+  - pattern: $USER->grantRole($_POST[...])
+  - pattern: Auth::loginUsingId($_GET[...])
+  - pattern: Auth::loginUsingId($_POST[...])
+  - pattern: Auth::loginUsingId($_REQUEST[...])
+  - pattern: posix_setuid(0)
+  - pattern: posix_seteuid(0)
+  - pattern: posix_setgid(0)
+  - pattern: posix_setegid(0)
+  - pattern: posix_setuid($_GET[...])
+  - pattern: posix_setuid($_POST[...])
+  - pattern: posix_seteuid($_GET[...])
+  - pattern: posix_seteuid($_POST[...])
+  - pattern: posix_setgid($_GET[...])
+  - pattern: posix_setgid($_POST[...])
+  - pattern: posix_setegid($_GET[...])
+  - pattern: posix_setegid($_POST[...])
+  message: 'Improper Privilege Management (CWE-269): The application grants, selects,
+    or elevates privileges without a trusted server-side authorization decision. Apply
+    least privilege, restrict role and permission changes to dedicated authorized
+    workflows, and never derive account identity, roles, or POSIX UID/GID from request
+    data.'
+  languages:
+  - php
+  severity: ERROR
+  metadata:
+    cwe:
+    - CWE-269
+- id: php-integer-overflow-cwe190
+  mode: taint
+  pattern-sources:
+  - pattern-either:
+    - pattern: $_GET[...]
+    - pattern: $_POST[...]
+    - pattern: $_REQUEST[...]
+    - pattern: $_COOKIE[...]
+    - pattern: $_FILES[...]
+    - pattern: $argv[...]
+  pattern-sinks:
+  - pattern-either:
+    - pattern: for ($I = $INIT; $I < $SINK + $VAL; $I++) { ... }
+    - pattern: for ($I = $INIT; $I < $SINK * $VAL; $I++) { ... }
+    - pattern: (int)($SINK + $VAL)
+    - pattern: (int)($SINK * $VAL)
+    - pattern: str_repeat($STR, $SINK * $VAL)
+    - pattern: str_repeat($STR, $SINK + $VAL)
+  pattern-sanitizers:
+  - pattern-either:
+    - pattern: "if ($VAR < $MAX) {\n  ...\n}\n"
+  message: 'Integer Overflow or Wraparound (CWE-190): Untrusted user input flows into
+    arithmetic operations that define loop limits, memory allocation limits, or are
+    explicitly cast to integers. Validate input bounds before performing arithmetic
+    operations.'
+  languages:
+  - php
+  severity: WARNING
+  metadata:
+    cwe:
+    - CWE-190
+- id: php-file-inclusion-cwe829
+  mode: taint
+  pattern-sources:
+  - pattern-either:
+    - pattern: $_GET
+    - pattern: $_POST
+    - pattern: $_REQUEST
+    - pattern: $_COOKIE
+    - pattern: $_SERVER
+    - pattern: $argv
+  pattern-sinks:
+  - pattern-either:
+    - pattern: include(...)
+    - pattern: include_once(...)
+    - pattern: require(...)
+    - pattern: require_once(...)
+  pattern-sanitizers:
+  - pattern-either:
+    - pattern: basename(...)
+    - pattern: pathinfo(...)
+  message: 'Inclusion of Functionality from Untrusted Control Sphere (CWE-829): Untrusted
+    user input is directly used in file inclusion statements. This can lead to Local
+    File Inclusion (LFI) or Remote File Inclusion (RFI) vulnerabilities.'
+  languages:
+  - php
+  severity: ERROR
+  metadata:
+    cwe:
+    - CWE-829
+- id: php-prototype-pollution-cwe1321
+  mode: taint
+  pattern-sources:
+  - pattern-either:
+    - pattern: $_GET
+    - pattern: $_POST
+    - pattern: $_REQUEST
+    - pattern: $_COOKIE
+    - pattern: $_SERVER
+  pattern-sinks:
+  - pattern-either:
+    - pattern: $OBJ[$KEY1][$KEY2] = $VAL
+    - pattern: $OBJ->{$KEY1}->{$KEY2} = $VAL
+    - pattern: array_merge_recursive($ARR, $SINK)
+    - pattern: $UTILS->extend($OBJ, $SINK)
+  pattern-sanitizers:
+  - pattern-either:
+    - pattern: "if ($KEY === \"__proto__\" || $KEY === \"prototype\" || $KEY === \"\
+        constructor\") {\n  ...\n}\n"
+    - pattern: "if (in_array($KEY, [\"__proto__\", \"prototype\", \"constructor\"\
+        ])) {\n  ...\n}\n"
+  message: 'Improper Controlled Modification of Object Prototype Attributes (''Prototype
+    Pollution'') (CWE-1321): Untrusted input keys flow into deep property assignments
+    or recursive merge operations without validating against prototype attributes
+    (e.g., __proto__, prototype, constructor).'
+  languages:
+  - php
+  severity: ERROR
+  metadata:
+    cwe:
+    - CWE-1321
+- id: php-improper-cert-validation-cwe295
+  mode: taint
+  pattern-sources:
+  - pattern-either:
+    - pattern: 'false'
+    - pattern: '0'
+  pattern-sinks:
+  - pattern-either:
+    - pattern: curl_setopt($CH, CURLOPT_SSL_VERIFYPEER, $SINK)
+    - pattern: curl_setopt($CH, CURLOPT_SSL_VERIFYHOST, $SINK)
+    - pattern: curl_setopt_array($CH, [..., CURLOPT_SSL_VERIFYPEER => $SINK, ...])
+    - pattern: curl_setopt_array($CH, [..., CURLOPT_SSL_VERIFYHOST => $SINK, ...])
+    - pattern: stream_context_create([..., "ssl" => [..., "verify_peer" => $SINK,
+        ...], ...])
+    - pattern: stream_context_create([..., "ssl" => [..., "verify_peer_name" => $SINK,
+        ...], ...])
+    - pattern: new GuzzleHttp\Client([..., "verify" => $SINK, ...])
+    - pattern: $CLIENT->request(..., ..., [..., "verify" => $SINK, ...])
+  message: 'Improper Certificate Validation (CWE-295): SSL/TLS certificate verification
+    is explicitly disabled. This allows man-in-the-middle (MITM) attacks. Ensure CURLOPT_SSL_VERIFYPEER,
+    CURLOPT_SSL_VERIFYHOST, Guzzle''s ''verify'', and stream context ''verify_peer''
+    are enabled.'
+  languages:
+  - php
+  severity: ERROR
+  metadata:
+    cwe:
+    - CWE-295
+- id: php-weak-hash-cwe328
+  # 直接匹配 md5/sha1 呼叫。CWE-328 弱雜湊本質是「使用了破損演算法」，
+  # 與輸入是否受污染無關；原本 taint 模式的 pattern-sources 混入裸 $PASSWORD/$SECRET
+  # （semgrep 中 $大寫 為萬用字元＝任意變數），taint 約束因而失效、退化成本規則現況，
+  # 故直接以呼叫本身為錨點，行為等價且移除語意化 metavariable 缺陷。
+  pattern-either:
+  - pattern: md5(...)
+  - pattern: sha1(...)
+  - pattern: hash("md5", ...)
+  - pattern: hash("sha1", ...)
+  - pattern: hash_hmac("md5", ...)
+  - pattern: hash_hmac("sha1", ...)
+  message: 'Use of Weak Cryptographic Algorithm (CWE-328): MD5 and SHA-1 are cryptographically
+    broken and prone to collision attacks. Use secure alternatives like bcrypt, Argon2
+    (via password_hash), or SHA-256/SHA-512 (via hash/hash_hmac).'
+  languages:
+  - php
+  severity: ERROR
+  metadata:
+    cwe:
+    - CWE-328

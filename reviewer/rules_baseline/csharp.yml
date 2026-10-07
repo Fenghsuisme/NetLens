@@ -1,0 +1,1017 @@
+rules:
+  - id: csharp-xss-cross-site-scripting-cwe79
+    pattern-either:
+      # Pattern 1: 呼叫任何物件的 Raw 方法（例如 Html.Raw 或類似的自訂對象）
+      - pattern: $HELPER.Raw($INPUT)
+
+      # Pattern 2: 直接呼叫 WriteAsync 且內部包含字串拼接
+      - pattern: $RESP.WriteAsync($X + $INPUT)
+
+      # Pattern 3: 帶有 await 的 WriteAsync 且內部包含字串拼接
+      - pattern: await $RESP.WriteAsync($X + $INPUT)
+
+      # Pattern 4: 建立 ContentResult 物件且屬性包含 Content 拼接與 text/html
+      - pattern: |
+          new ContentResult {
+            Content = $X + $INPUT,
+            ContentType = "text/html"
+          }
+      - pattern: |
+          new ContentResult {
+            ContentType = "text/html",
+            Content = $X + $INPUT
+          }
+
+    message: "Cross-Site Scripting (XSS) (CWE-79): Untrusted input is rendered directly to the output without proper encoding. Ensure inputs are encoded using HtmlEncoder, or sanitized properly."
+    languages: [csharp]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-79']
+
+  - id: csharp-sqli-sql-injection-cwe89
+    pattern-either:
+      # Pattern 1: ADO.NET SqlCommand 建立時直接傳入字串拼接或插值
+      - pattern: new FakeSqlCommand($X + $INPUT, ...)
+      - pattern: new FakeSqlCommand($"...{$INPUT}...", ...)
+
+      # Pattern 2: 任何物件呼叫 Query/Execute 族群方法且內部包含字串拼接或插值
+      - pattern: $TARGET.Query($X + $INPUT, ...)
+      - pattern: $TARGET.Query($"...{$INPUT}...", ...)
+      - pattern: $TARGET.Execute($X + $INPUT, ...)
+      - pattern: $TARGET.Execute($"...{$INPUT}...", ...)
+
+      # Pattern 3: Entity Framework 原始 SQL 查詢/執行方法
+      - pattern: $TARGET.FromSqlRaw($X + $INPUT, ...)
+      - pattern: $TARGET.FromSqlRaw($"...{$INPUT}...", ...)
+      - pattern: $TARGET.ExecuteSqlRaw($X + $INPUT, ...)
+      - pattern: $TARGET.ExecuteSqlRaw($"...{$INPUT}...", ...)
+
+    message: "SQL Injection (SQLi) (CWE-89): Input is concatenated directly into a SQL query string. Use parameterized queries or ORM parameters to safeguard database operations."
+    languages: [csharp]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-89']
+
+  - id: csharp-csrf-cross-site-request-forgery-cwe352
+    patterns:
+      # 1. 抓取所有帶有任何屬性修飾的方法
+      - pattern: |
+          [$ATTR]
+          public $TYPE $METHOD(...) { ... }
+      
+      # 2. 限定這個屬性必須是變更資料的動詞 (HttpPost, HttpDelete, HttpPut 或 IgnoreAntiforgeryToken)
+      - metavariable-regex:
+          metavariable: $ATTR
+          regex: (?i)(HttpPost|HttpDelete|HttpPut|IgnoreAntiforgeryToken)
+
+      # 3. 強制排除：如果屬性裡面已經包含了安全防護標籤，則判定為安全
+      - pattern-not: |
+          [ValidateAntiForgeryToken]
+          public $TYPE $METHOD(...) { ... }
+      - pattern-not: |
+          [$ANY, ValidateAntiForgeryToken]
+          public $TYPE $METHOD(...) { ... }
+      - pattern-not: |
+          [ValidateAntiForgeryToken, $ANY]
+          public $TYPE $METHOD(...) { ... }
+
+    message: "Cross-Site Request Forgery (CSRF) (CWE-352): A method that modifies data (POST/PUT/DELETE) is missing Anti-Forgery Token validation. Apply [ValidateAntiForgeryToken] or [AutoValidateAntiforgeryToken] globally."
+    languages: [csharp]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-352']
+
+  - id: csharp-auth-missing-authorization-cwe862
+    patterns:
+      # 1. 抓取所有帶有路由屬性或匿名屬性的方法
+      - pattern-either:
+          - pattern: |
+              [$ATTR]
+              public $TYPE $METHOD(...) { ... }
+          - pattern: |
+              [AllowAnonymous]
+              public $TYPE $METHOD(...) { ... }
+      
+      # 2. 限定必須是常見的 Web API / MVC 路由進入點
+      - metavariable-regex:
+          metavariable: $ATTR
+          regex: (?i)(HttpGet|HttpPost|HttpPut|HttpDelete|Route)
+
+      # 3. 終極排除：列舉所有可能出現在方法上方的 Authorize 組合（包含帶參數與不帶參數）
+      - pattern-not: |
+          [Authorize]
+          public $TYPE $METHOD(...) { ... }
+      - pattern-not: |
+          [Authorize(...)]
+          public $TYPE $METHOD(...) { ... }
+      - pattern-not: |
+          [Authorize] [$ANY]
+          public $TYPE $METHOD(...) { ... }
+      - pattern-not: |
+          [Authorize(...)] [$ANY]
+          public $TYPE $METHOD(...) { ... }
+      - pattern-not: |
+          [$ANY, Authorize]
+          public $TYPE $METHOD(...) { ... }
+      - pattern-not: |
+          [$ANY, Authorize(...)]
+          public $TYPE $METHOD(...) { ... }
+
+    message: "Missing Authorization (CWE-862): This HTTP endpoint lacks an [Authorize] attribute. Ensure appropriate role-based or policy-based authorization is enforced."
+    languages: [csharp]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-862']
+
+  - id: csharp-buffer-overflow-out-of-bounds-write-cwe787
+    pattern-either:
+      # Pattern 1: 在 unsafe 區塊中，直接對指標進行未經驗證的陣列下標或加法偏移寫入
+      - pattern: |
+          *($PTR + $INDEX) = $VALUE;
+      - pattern: |
+          $PTR[$INDEX] = $VALUE;
+
+      # Pattern 2: 使用 Marshal.Copy 寫入 Unmanaged 緩衝區時，長度或偏移量直接使用外部傳入的變數
+      - pattern: |
+          FakeMarshal.Copy($SRC, $SRC_IDX, $DEST, $LENGTH);
+
+      # Pattern 3: 使用 stackalloc 建立固定大小緩衝區，卻用未經邊界檢查的變數寫入
+      - pattern: |
+          int* $BUF = stackalloc int[$SIZE];
+          ...
+          $BUF[$INDEX] = $VALUE;
+
+    message: "Out-of-bounds Write (CWE-787): Unsafe pointer manipulation or unmanaged memory copy detected without explicit bounds checking. This can lead to memory corruption or buffer overflows."
+    languages: [csharp]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-787']
+
+  - id: csharp-path-traversal-cwe22
+    pattern-either:
+      # Pattern 1: 呼叫 FakeFile 的讀寫方法時直接使用字串拼接或插值
+      - pattern: FakeFile.ReadAllText($X + $INPUT, ...)
+      - pattern: FakeFile.ReadAllText($"...{$INPUT}...", ...)
+      - pattern: FakeFile.WriteAllText($X + $INPUT, ...)
+      - pattern: FakeFile.WriteAllText($"...{$INPUT}...", ...)
+
+      # Pattern 2: 建立 FakeFileStream 時直接傳入拼接或插值路徑
+      - pattern: new FakeFileStream($X + $INPUT, ...)
+      - pattern: new FakeFileStream($"...{$INPUT}...", ...)
+
+      # Pattern 3: 呼叫結合路徑的方法時誤用拼接
+      - pattern: FakePath.Combine($X, $Y + $INPUT, ...)
+      - pattern: FakePath.Combine($X, $"...{$INPUT}...", ...)
+
+    message: "Path Traversal (CWE-22): Input is directly concatenated into a file path. An attacker could use '../' to access sensitive files outside the intended directory."
+    languages: [csharp]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-22']
+
+  - id: csharp-memory-use-after-free-cwe416
+    pattern-either:
+      # Pattern 1: 使用 FakeMarshal 釋放指標後，又直接對該指標解引用（Dereference）或下標寫入值
+      - pattern: |
+          FakeMarshal.FreeHGlobal($PTR);
+          ...
+          *($PTR + $INDEX) = $VALUE;
+      - pattern: |
+          FakeMarshal.FreeHGlobal($PTR);
+          ...
+          $PTR[$INDEX] = $VALUE;
+
+      # Pattern 2: 使用 FakeMarshal 釋放指標後，又將該指標傳入其他方法使用
+      - pattern: |
+          FakeMarshal.FreeHGlobal($PTR);
+          ...
+          $FUNC(..., $PTR, ...);
+
+      # Pattern 3: 控制代碼（Handle）被顯式釋放或關閉後，又嘗試調用其內部的資源方法
+      - pattern: |
+          $HANDLE.Dispose();
+          ...
+          $HANDLE.$METHOD(...);
+
+    message: "Use After Free (CWE-416): Attempted to access or modify a pointer/resource after it has been freed or disposed. This can lead to memory corruption, crashes, or arbitrary code execution."
+    languages: [csharp]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-416']
+
+  - id: csharp-buffer-overflow-out-of-bounds-read-cwe125
+    pattern-either:
+      # Pattern 1: 在 unsafe 區塊中，直接透過指標進行未經驗證的加法偏移讀取或下標讀取
+      - pattern: |
+          $VAR = *($PTR + $INDEX);
+      - pattern: |
+          $VAR = $PTR[$INDEX];
+      - pattern: |
+          return *($PTR + $INDEX);
+      - pattern: |
+          return $PTR[$INDEX];
+
+      # Pattern 2: 使用 Marshal.Copy 將 Unmanaged 記憶體讀出至陣列時，長度直接使用外部輸入
+      - pattern: |
+          FakeMarshal.Copy($SRC, $DEST, $DEST_IDX, $LENGTH);
+
+      # Pattern 3: 在指標循環（如迴圈）中，終止條件使用了未經核對的邊界變數
+      - pattern: |
+          for (...; $START < $LIMIT; ...) {
+              ...
+              $VAR = $PTR[$START];
+              ...
+          }
+
+    message: "Out-of-bounds Read (CWE-125): Unsafe pointer access or unmanaged memory copy detected without proper bounds verification. This can lead to information disclosure or application crashes."
+    languages: [csharp]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-125']
+
+  - id: csharp-os-command-injection-cwe78
+    pattern-either:
+      # Pattern 1: 呼叫 FakeProcess.Start 時，直接拼接指令或參數
+      - pattern: FakeProcess.Start($CMD, $ARGS + $INPUT)
+      - pattern: FakeProcess.Start($CMD, $"...{$INPUT}...")
+      - pattern: FakeProcess.Start($INPUT + $ARGS)
+      - pattern: FakeProcess.Start($"...{$INPUT}...")
+
+      # Pattern 2: 設定 FakeProcessStartInfo 屬性時，對 FileName 或 Arguments 進行字串拼接/插值
+      - pattern: |
+          $INFO.FileName = $INPUT + $X;
+      - pattern: |
+          $INFO.FileName = $"...{$INPUT}...";
+      - pattern: |
+          $INFO.Arguments = $X + $INPUT;
+      - pattern: |
+          $INFO.Arguments = $"...{$INPUT}...";
+
+    message: "OS Command Injection (CWE-78): Unsanitized user input is used to construct OS commands. An attacker can inject malicious commands executed with the application's privileges."
+    languages: [csharp]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-78']
+
+  - id: csharp-code-injection-cwe94
+    pattern-either:
+      # Pattern 1: 使用 CSharpScript 動態評估包含字串拼接或插值的程式碼字串
+      - pattern: FakeCSharpScript.EvaluateAsync($CODE + $INPUT, ...)
+      - pattern: FakeCSharpScript.EvaluateAsync($"...{$INPUT}...", ...)
+
+      # Pattern 2: 呼叫腳本引擎（如 CSScript）直接載入或編譯拼接後的動態程式碼
+      - pattern: $ENGINE.CompileCode($X + $INPUT, ...)
+      - pattern: $ENGINE.CompileCode($"...{$INPUT}...", ...)
+
+      # Pattern 3: 動態 LINQ 擴充方法或運算式解析器直接傳入未參數化的拼接字串
+      - pattern: $QUERY.Where($X + $INPUT, ...)
+      - pattern: $QUERY.Where($"...{$INPUT}...", ...)
+
+    message: "Code Injection (CWE-94): Unsanitized input is used to construct or compile dynamic code/expressions. This can allow attackers to execute arbitrary code within the application context."
+    languages: [csharp]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-94']
+
+  - id: csharp-buffer-overflow-unbounded-copy-cwe120
+    pattern-either:
+      # Pattern 1: P/Invoke 宣告或直接呼叫不安全的原生 C 函式（如 strcpy）進行複製
+      - pattern: FakeNativeMethods.strcpy($DEST, $SRC)
+      - pattern: FakeNativeMethods.sprintf($DEST, $FORMAT, ...)
+
+      # Pattern 2: 在 unsafe 區塊中，利用迴圈將一個指標內容複製到另一個指標，但終止條件未限制在目的端的大小內
+      - pattern: |
+          while (*$SRC != $TERM) {
+              *$DEST = *$SRC;
+              $DEST++;
+              $SRC++;
+          }
+
+      # Pattern 3: 使用 FakeMarshal.Copy 或類似 API 將陣列複製到 Unmanaged 記憶體，長度直接使用來源陣列長度，卻未檢查目的端緩衝區大小
+      - pattern: |
+          FakeMarshal.Copy($SRC, $SRC_IDX, $DEST, $SRC.Length);
+
+    message: "Buffer Copy without Checking Size of Input (CWE-120): Copying data to a buffer without validating the input size can overwrite adjacent memory, leading to crashes or arbitrary code execution."
+    languages: [csharp]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-120']
+
+  - id: csharp-file-upload-unrestricted-dangerous-type-cwe434
+    pattern-either:
+      # Pattern 1: 僅依賴 IFormFile.ContentType 來做安全檢查 (Content-Type 極易被客戶端偽造)
+      - pattern: |
+          if ($FILE.ContentType == $X) {
+              ...
+          }
+      - pattern: |
+          if ($FILE.ContentType.Equals(...)) {
+              ...
+          }
+
+      # Pattern 2: 儲存檔案時，直接拼接外部傳入的原始檔名 (FILE.FileName)，且中途未呼叫任何副檔名安全檢查
+      - pattern: |
+          string $PATH = FakePath.Combine($DIR, $FILE.FileName);
+          ...
+          $FILE.CopyToAsync(...);
+
+      # Pattern 3: 直接將不安全的 IFormFile 原始檔名寫入硬碟或目標流
+      - pattern: |
+          using (var $STREAM = new FakeFileStream(..., $FILE.FileName, ...)) {
+              ...
+          }
+
+    message: "Unrestricted Upload of File with Dangerous Type (CWE-434): The application performs dangerous file upload operations without strictly validating file extensions or content magic numbers on the server side. Do not trust Content-Type or original FileName directly."
+    languages: [csharp]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-434']
+
+  - id: csharp-null-pointer-dereference-cwe476
+    pattern-either:
+      # Pattern 1: 使用 C# 的 "as" 關鍵字進行轉型（失敗時會回傳 null），卻沒有進行 null 檢查就直接存取成員
+      - pattern: |
+          var $VAR = $OBJ as $TYPE;
+          ...
+          $VAR.$MEMBER(...);
+      - pattern: |
+          var $VAR = $OBJ as $TYPE;
+          ...
+          $VAR.$PROPERTY;
+
+      # Pattern 2: 呼叫了明確告知可能回傳 null 的 LINQ 方法（如 FirstOrDefault），隨後未經檢查直接解引用
+      - pattern: |
+          var $VAR = $LIST.FirstOrDefault(...);
+          ...
+          $VAR.$MEMBER(...);
+      - pattern: |
+          var $VAR = $LIST.FirstOrDefault(...);
+          ...
+          $VAR.$PROPERTY;
+
+      # Pattern 3: 程式碼內部自己寫了 `if ($VAR == null)` 的邏輯，卻在 null 的條件分支內（或完全沒 return 的外部）直接讀取它
+      - pattern: |
+          if ($VAR == null) {
+              ...
+              $VAR.$MEMBER(...);
+          }
+
+    message: "Null Pointer Dereference (CWE-476): The object is dereferenced without a prior null check after an operation that can result in a null value (such as 'as' casting, FirstOrDefault, or an explicit null comparison). This will throw a NullReferenceException and may cause a Denial of Service (DoS)."
+    languages: [csharp]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-476']
+
+  - id: csharp-buffer-overflow-stack-based-cwe121
+    pattern-either:
+      # Pattern 1: 使用 stackalloc 分配固定大小的堆疊空間，隨後卻使用未經檢查的 index 進行指標寫入
+      - pattern: |
+          $TYPE* $BUF = stackalloc $TYPE[$SIZE];
+          ...
+          *($BUF + $INDEX) = $VALUE;
+      - pattern: |
+          $TYPE* $BUF = stackalloc $TYPE[$SIZE];
+          ...
+          $BUF[$INDEX] = $VALUE;
+
+      # Pattern 2: 在 stackalloc 分配的空間中進行指標逐位元寫入（如 while 迴圈），但其終止條件未與緩衝區大小掛鉤
+      - pattern: |
+          byte* $DEST = stackalloc byte[$SIZE];
+          ...
+          while (*$SRC != $TERM) {
+              *$DEST = *$SRC;
+              $DEST++;
+              $SRC++;
+          }
+
+      # Pattern 3: 直接使用未經校驗或外部傳入的變數作為 stackalloc 的大小限制，可能導致堆疊耗盡或邊界計算溢位
+      - pattern: |
+          $TYPE* $BUF = stackalloc $TYPE[$USER_INPUT];
+
+    message: "Stack-based Buffer Overflow (CWE-121): Unsafe stackalloc buffer manipulation detected. Writing beyond stack-allocated memory boundaries or allocating unbounded stack size can lead to stack corruption, unexpected crashes, or remote code execution."
+    languages: [csharp]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-121']
+
+  - id: csharp-deserialization-untrusted-data-cwe502
+    pattern-either:
+      # Pattern 1: Newtonsoft.Json (Json.NET) 設定了 TypeNameHandling 且大於 None（此配置允許 JSON 中攜帶型別資訊，極度危險）
+      - pattern: |
+          $SETTINGS.TypeNameHandling = FakeTypeNameHandling.$ALL;
+          ...
+          FakeJsonConvert.DeserializeObject(..., $SETTINGS);
+      - pattern: |
+          $SETTINGS.TypeNameHandling = FakeTypeNameHandling.$ALL;
+          ...
+          FakeJsonConvert.DeserializeObject<$TYPE>(..., $SETTINGS);
+
+      # Pattern 2: 使用已被官方強烈警告、本質上完全不安全的 BinaryFormatter 進行不安全的反序列化
+      - pattern: |
+          FakeBinaryFormatter $BF = new FakeBinaryFormatter(...);
+          ...
+          $BF.Deserialize(...);
+
+      # Pattern 3: 使用自帶型別宣告載入的 NetDataContractSerializer 處理惡意資料流
+      - pattern: |
+          FakeNetDataContractSerializer $NDCS = new FakeNetDataContractSerializer(...);
+          ...
+          $NDCS.ReadObject(...);
+
+    message: "Deserialization of Untrusted Data (CWE-502): Insecure deserialization configurations or tools (such as BinaryFormatter, NetDataContractSerializer, or Newtonsoft.Json with TypeNameHandling enabled) can allow attackers to execute arbitrary code. Ensure strict type validation or safer formatters like System.Text.Json are used."
+    languages: [csharp]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-502']
+
+  - id: csharp-buffer-overflow-heap-based-cwe122
+    pattern-either:
+      # Pattern 1: 在 Unmanaged Heap 配置空間後，直接對指標進行加法偏移寫入或下標寫入，且缺乏邊界檢查
+      - pattern: |
+          IntPtr $HGLOBAL = FakeMarshal.AllocHGlobal($SIZE);
+          ...
+          *($PTR + $INDEX) = $VALUE;
+      - pattern: |
+          IntPtr $HGLOBAL = FakeMarshal.AllocHGlobal($SIZE);
+          ...
+          $PTR[$INDEX] = $VALUE;
+
+      # Pattern 2: 在 Heap 記憶體區塊中進行指標逐位寫入（如 while 迴圈），但其終止條件並未與 Heap 配置的大小掛鉤
+      - pattern: |
+          IntPtr $HGLOBAL = FakeMarshal.AllocHGlobal($SIZE);
+          ...
+          while (*$SRC != $TERM) {
+              *$DEST = *$SRC;
+              $DEST++;
+              $SRC++;
+          }
+
+      # Pattern 3: 使用 Marshal.Copy 將資料寫入 Heap 指標時，長度直接塞來源陣列的 Length，而完全沒有校驗 Heap 實際分配的大小
+      - pattern: |
+          IntPtr $HGLOBAL = FakeMarshal.AllocHGlobal($SIZE);
+          ...
+          FakeMarshal.Copy($SRC, $SRC_IDX, $HGLOBAL, $SRC.Length);
+
+    message: "Heap-based Buffer Overflow (CWE-122): Unsafe Heap allocation or pointer manipulation detected without explicit bounds validation. Overwriting heap memory can lead to data corruption, heap layout manipulation, or arbitrary code execution."
+    languages: [csharp]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-122']
+
+  - id: csharp-auth-incorrect-authorization-cwe863
+    pattern-either:
+      # Pattern 1: 同一方法上同時存在 [Authorize] 與 [AllowAnonymous]，導致授權檢查被直接忽略
+      - pattern: |
+          [Authorize, AllowAnonymous]
+          public $TYPE $METHOD(...) { ... }
+      - pattern: |
+          [AllowAnonymous, Authorize]
+          public $TYPE $METHOD(...) { ... }
+      - pattern: |
+          [Authorize(...), AllowAnonymous]
+          public $TYPE $METHOD(...) { ... }
+
+      # Pattern 2: 在同一個自訂 Controller 類別中，方法層級宣告 [AllowAnonymous] 卻試圖保護敏感路由
+      - pattern: |
+          [AllowAnonymous]
+          [HttpPost($ROUTE)]
+          public $TYPE $METHOD(...) { ... }
+
+      # Pattern 3: 自訂授權檢查中，使用了硬編碼的敏感字串（如 "Admin"）進行不安全的基礎字串比對，容易引發邏輯不對稱
+      - pattern: |
+          if ($USER.Identity.Name == "Admin") {
+              ...
+          }
+
+    message: "Incorrect Authorization (CWE-863): An incorrect authorization configuration or logical conflict (such as combining [Authorize] and [AllowAnonymous], or using hardcoded username checks) can bypass intended security access controls."
+    languages: [csharp]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-863']
+
+  - id: csharp-improper-input-validation-cwe20
+    pattern-either:
+      # Pattern 1: 外部數值輸入直接做為動態資源配置或陣列初始化的長度，且中途沒有任何 if 範圍校驗
+      - pattern: |
+          public $TYPE $METHOD(..., int $INPUT, ...) {
+              ...
+              var $BUF = new $SUBTYPE[$INPUT];
+              ...
+          }
+
+      # Pattern 2: 開放式重新導向 (Open Redirection) — 直接將外部傳入的網址字串帶入 Redirect 方法，缺乏本地網域或白名單驗證
+      - pattern: |
+          public $TYPE $METHOD(..., string $URL, ...) {
+              ...
+              return FakeRedirect($URL);
+          }
+
+      # Pattern 3: 反射（Reflection）或動態物件建立時，直接依賴外部傳入的型別名稱字串，未經過白名單過濾
+      - pattern: |
+          public $TYPE $METHOD(..., string $TYPENAME, ...) {
+              ...
+              Type.GetType($TYPENAME);
+              ...
+          }
+
+    message: "Improper Input Validation (CWE-20): The application receives input from an untrusted source without fully validating its format, length, range, or destination. This can lead to resource exhaustion, Open Redirection, or unauthorized reflection execution."
+    languages: [csharp]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-20']
+
+  - id: csharp-improper-access-control-cwe284
+    pattern-either:
+      # Pattern 1: 命名包含 Admin/Secure 且繼承自 ControllerBase 的類別，卻完全沒有宣告 [Authorize] 特徵屬性
+      - pattern: |
+          class $ADMINCONTROLLER : FakeControllerBase {
+              ...
+              public $TYPE $METHOD(...) { ... }
+          }
+
+      # Pattern 2: 在類別中將敏感的加密、憑證、金鑰或金流變數配置為 public static，允許整個應用程式的任何元件任意串改
+      - pattern: |
+          public static string $SECRET_KEY = ...;
+      - pattern: |
+          public static byte[] $CRYPTO_KEY = ...;
+
+      # Pattern 3: 在公開對外暴露的服務合約（ServiceContract）中，方法層級完全沒有設定任何安全限制
+      - pattern: |
+          [FakeServiceContract]
+          public interface $SERVICE {
+              [FakeOperationContract]
+              $TYPE $METHOD(...);
+          }
+
+    message: "Improper Access Control (CWE-284): The application fails to properly restrict access to sensitive controllers, data fields, or service contracts. Ensure [Authorize] filters are applied or restrict variable visibility with narrower access modifiers (e.g., internal/private)."
+    languages: [csharp]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-284']
+
+  - id: csharp-information-exposure-cwe200
+    pattern-either:
+      # Pattern 1: 在 catch 區塊中，直接將異常物件的 ToString()、Message 或 StackTrace 當作回應回傳給客戶端
+      - pattern: |
+          catch (Exception $EX) {
+              ...
+              return FakeBadRequest($EX.ToString());
+          }
+      - pattern: |
+          catch (Exception $EX) {
+              ...
+              return FakeBadRequest($EX.StackTrace);
+          }
+
+      # Pattern 2: 在日誌或回應中，直接串接或讀取含有 ConnectionString、Password、Secret 等敏感關鍵字的組態欄位
+      - pattern: |
+          FakeLogger.Log($X + $CONFIG.ConnectionString);
+      - pattern: |
+          FakeLogger.Log($"...{$CONFIG.ConnectionString}...");
+
+      # Pattern 3: 直接將含有敏感字串的內部環境變數或組態物件序列化並輸出
+      - pattern: |
+          return FakeJson($CONFIG.GetSection("ConnectionStrings"));
+
+    message: "Exposure of Sensitive Information (CWE-200): Explict leak of internal exceptions (such as StackTrace) or infrastructure secrets (such as ConnectionStrings) detected. This can expose system architecture to attackers, facilitating further exploitation."
+    languages: [csharp]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-200']
+
+  - id: csharp-auth-missing-authentication-cwe306
+    pattern-either:
+      # Pattern 1: 帶有 [FakeHttpPost(...)] 卻「沒有」[Authorize] 的裸奔敏感方法
+      - pattern: |
+          [FakeHttpPost($ROUTE)]
+          public $TYPE $METHOD(...) { ... }
+
+      # Pattern 2: 帶有 [AllowAnonymous] 且內部呼叫了敏感交易或核心操作的方法
+      - pattern: |
+          [AllowAnonymous]
+          [FakeHttpPost($ROUTE)]
+          public $TYPE $METHOD(...)
+          {
+              ...
+              $SERVICE.TransferFunds(...);
+              ...
+          }
+      - pattern: |
+          [AllowAnonymous]
+          [FakeHttpPost($ROUTE)]
+          public $TYPE $METHOD(...)
+          {
+              ...
+              $SERVICE.ExecuteCriticalAction(...);
+              ...
+          }
+
+    message: "Missing Authentication for Critical Function (CWE-306): A critical function or sensitive endpoint is missing appropriate [Authorize] protection, or is explicitly open via [AllowAnonymous]. This allows unauthenticated users to execute administrative or business-critical operations."
+    languages: [csharp]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-306']
+
+  - id: csharp-ssrf-httpclient-cwe918
+    pattern-either:
+      # Pattern 1: 直接在 HttpClient 方法（如 GetAsync / GetStringAsync）中進行字串拼接或插值
+      - pattern: $CLIENT.GetAsync($X + $INPUT, ...)
+      - pattern: $CLIENT.GetAsync($"...{$INPUT}...", ...)
+      - pattern: $CLIENT.GetStringAsync($X + $INPUT, ...)
+      - pattern: $CLIENT.GetStringAsync($"...{$INPUT}...", ...)
+
+      # Pattern 2: 在建構 Uri 物件時進行字串拼接或插值（這通常是發送請求的前置步驟）
+      - pattern: new Uri($X + $INPUT, ...)
+      - pattern: new Uri($"...{$INPUT}...", ...)
+
+      # Pattern 3: 使用傳統的 WebRequest.Create 進行字串拼接或插值
+      - pattern: FakeWebRequest.Create($X + $INPUT, ...)
+      - pattern: FakeWebRequest.Create($"...{$INPUT}...", ...)
+
+    message: "Server-Side Request Forgery (CWE-918): Unsanitized user input is used to construct a target URL for server-side network requests. An attacker can manipulate this input to scan internal networks, access private services, or exploit metadata APIs."
+    languages: [csharp]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-918']
+
+  - id: csharp-command-injection-cwe77
+    pattern-either:
+      # Pattern 1: 直接在 Process.Start 靜態方法中拼接或插值執行參數
+      - pattern: FakeProcess.Start($CMD, $X + $INPUT, ...)
+      - pattern: FakeProcess.Start($CMD, $"...{$INPUT}...", ...)
+
+      # Pattern 2: 透過 ProcessStartInfo 屬性指派時，將拼接字串餵給 Arguments
+      - pattern: |
+          $INFO.Arguments = $X + $INPUT;
+      - pattern: |
+          $INFO.Arguments = $"...{$INPUT}...";
+
+      # Pattern 3: 直接將拼接後的惡意字串當作 FileName（可能直接執行被包裝的惡意 shell 指令）
+      - pattern: |
+          $INFO.FileName = $X + $INPUT;
+      - pattern: |
+          $INFO.FileName = $"...{$INPUT}...";
+
+    message: "Command Injection (CWE-77): Unsanitized user input is used to construct system commands or arguments. Attackers can inject command separators (e.g., ';', '&&', '|') to execute arbitrary shell commands on the server."
+    languages: [csharp]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-77']
+
+  - id: csharp-idor-authorization-bypass-cwe639
+    pattern-either:
+      # Pattern 1: 方法直接接收外部輸入的 id 參數，隨後直接調用 Repository 獲取物件並回傳，中途完全沒有比對當前登入者身分
+      - pattern: |
+          public $TYPE $METHOD(..., int $ID, ...) {
+              ...
+              var $RES = $REPO.GetById($ID);
+              ...
+              return FakeOk($RES);
+          }
+
+      # Pattern 2: 在更新或刪除操作中，直接使用前端傳來的物件屬性（如 accountId）進行持久化，而未校驗目前連線使用者的擁有權
+      - pattern: |
+          public $TYPE $METHOD(..., FakeOrder $ORDER, ...) {
+              ...
+              $REPO.Update($ORDER);
+              ...
+          }
+
+      # Pattern 3: 自訂 SQL 查詢中，直接將前端傳入的參數作為單一過濾條件，完全缺乏多租戶或身分關係隔離 (例如 And UserId = CurrentUser)
+      - pattern: |
+          string $QUERY = FakeString.Format("SELECT * FROM Orders WHERE Id = {0}", $INPUT);
+
+    message: "Authorization Bypass Through User-Controlled Key (CWE-639 / IDOR): The application direct accesses resources based on user-supplied keys without cross-checking if the current authenticated user owns that resource. Ensure you add an ownership check (e.g., query by both resource ID and current user ID)."
+    languages: [csharp]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-639']
+
+  - id: csharp-resource-limit-allocation-cwe770
+    pattern-either:
+      # Pattern 1: 直接使用外部傳入的 size 變數初始化陣列，沒有任何小於最大上限的檢查
+      - pattern: |
+          public $TYPE $METHOD(..., int $SIZE, ...) {
+              ...
+              var $ARR = new $T[$SIZE];
+              ...
+          }
+
+      # Pattern 2: 在 Task.Delay 或 Thread.Sleep 中直接傳入外部可控的毫秒數，可能導致執行緒被無限期鎖定
+      - pattern: |
+          FakeTask.Delay($MS);
+
+      # Pattern 3: 直接以外部傳入的變數作為迴圈的終止條件，進行高耗能操作（如密碼 Hash、讀取等）且中途無上限檢查
+      - pattern: |
+          public $TYPE $METHOD(..., int $COUNT, ...) {
+              ...
+              for (int $I = 0; $I < $COUNT; $I++) {
+                  ...
+                  $FX.ExpensiveOperation(...);
+                  ...
+              }
+              ...
+          }
+
+    message: "Allocation of Resources Without Limits or Throttling (CWE-770): User-controlled input is used directly to determine the amount of resources (memory allocation, execution loops, or delay timers) to allocate. This can easily lead to Denial of Service (DoS) via resource exhaustion."
+    languages: [csharp]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-770']
+
+  - id: csharp-improper-authentication-cwe287
+    pattern-either:
+      # Pattern 1: 弱點登入流向 — 撈出使用者後，直接核發 Token 且方法體內完全沒有比對密碼
+      - pattern: |
+          public $TYPE $METHOD(..., string $USER, string $PASS, ...)
+          {
+              var $U = $REPO.FindUser($USER);
+              return FakeOk($AUTH.IssueToken($U));
+          }
+
+      # Pattern 2: 直接讀取完全可被偽造的 HTTP Header 字串來進行身分識別與登入
+      - pattern: |
+          string $UID = $REQ.GetHeaderValue("X-User-ID");
+          ...
+          FakeSignIn($UID);
+
+      # Pattern 3: JWT 驗證安全參數配置錯誤，將關鍵的 ValidateIssuerSigningKey 設為 false
+      - pattern: |
+          $PARAMS.ValidateIssuerSigningKey = false;
+
+    message: "Improper Authentication (CWE-287): The application implements a flawed authentication mechanism, such as omitting password validation before token issuance, relying on untrusted HTTP headers for identity, or disabling JWT signing key validation."
+    languages: [csharp]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-287']
+
+  - id: csharp-improper-privilege-management-cwe269
+    pattern-either:
+      # Pattern 1: 呼叫 Impersonate() 提升權限，直接將其指派給獨立變數（未依賴安全自動釋放的 using 關鍵字結構）
+      - pattern: |
+          var $CTX = $ID.Impersonate();
+      - pattern: |
+          FakeWindowsImpersonationContext $CTX = $ID.Impersonate();
+
+      # Pattern 2: 角色動態變更 — 直接讀取前端傳入的權限字串（如 newRole），無條件加入使用者權限庫中
+      - pattern: |
+          public $TYPE $METHOD(..., string $NEWROLE, ...)
+          {
+              ...
+              $USER.AddRole($NEWROLE);
+              ...
+          }
+
+      # Pattern 3: 直接對執行緒的安全主體進行強行覆寫（不論右側建構子帶有何種參數組合）
+      - pattern: |
+          FakeThread.CurrentPrincipal = new FakeGenericPrincipal(...);
+
+    message: "Improper Privilege Management (CWE-269): The application improperly manages privileges, such as failing to revoke impersonated tokens, dynamically allowing untrusted actors to self-assign high-privileged roles, or forced global thread principal elevation. This can lead to horizontal or vertical privilege escalation."
+    languages: [csharp]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-269']
+
+  - id: csharp-buffer-operation-bounds-cwe119
+    pattern-either:
+      # Pattern 1: 在 unsafe 區塊中，直接對指標進行未經保護的加法偏移或索引寫入
+      - pattern: |
+          $TYPE* $PTR = ...;
+          ...
+          *($PTR + $INDEX) = $VALUE;
+      - pattern: |
+          $TYPE* $PTR = ...;
+          ...
+          $PTR[$INDEX] = $VALUE;
+
+      # Pattern 2: 使用不安全的 System.Runtime.CompilerServices.Unsafe 工具強轉指標或結構，繞過邊界檢查
+      - pattern: |
+          FakeUnsafe.AsRef<$TYPE>($PTR);
+      - pattern: |
+          FakeMemoryMarshal.Cast<$T1, $T2>($SPAN);
+
+      # Pattern 3: 使用 Marshal.Copy 將陣列寫入原生緩衝區時，直接使用變數長度，缺乏邊界比對
+      - pattern: |
+          FakeMarshal.Copy($SRC, $SRC_IDX, $DEST_PTR, $LEN);
+
+    message: "Improper Restriction of Operations within the Bounds of a Memory Buffer (CWE-119): Unsafe pointer operations, unchecked Marshal.Copy lengths, or dangerous Span type casting detected. These operations bypass CLR managed safety and can corrupt memory or cause application crashes."
+    languages: [csharp]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-119']
+
+  - id: csharp-hardcoded-credentials-cwe798
+    pattern-either:
+      # Pattern 1: 直接鎖定包含 Password= 的硬編碼字串賦值（這是最經典且最不可動搖的字串比對）
+      - pattern: |
+          string $VAR = "...Password=...";
+
+      # Pattern 2: 捕獲程式碼中直接將明確的 API 密鑰字串賦值給任意變數
+      - pattern: |
+          string $VAR = "AIzaSyA1234567890-B_ExampleKeyString";
+      - pattern: |
+          string $VAR = "SuperSecurePassword123!";
+
+      # Pattern 3: 最底層的物件建構特徵，不論裡面帶什麼參數，只要呼叫該安全金鑰類別就直接攔截
+      - pattern: |
+          new FakeSymmetricSecurityKey(...)
+
+    message: "Use of Hard-coded Credentials (CWE-798): Hard-coded credentials, connection strings, or cryptographic keys detected. Store credentials securely in appsettings.json or Environment Variables."
+    languages: [csharp]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-798']
+
+  - id: csharp-integer-overflow-cwe190
+    pattern-either:
+      # Pattern 1: 捕捉直接進行整數乘法並指派給變數的特徵（常見於未限制的緩衝區大小計算）
+      - pattern: |
+          $VAR = $COUNT * $SIZE;
+
+      # Pattern 2: 捕捉直接對變數進行累加的特徵（常見於未校驗的計數器或金額累加）
+      - pattern: |
+          $VAR += $INPUT;
+
+      # Pattern 3: 基礎的數學函式（如 Math.Abs）在處理特定極端值（如 int.MinValue）時會因為溢位維持負數
+      - pattern: |
+          FakeMath.Abs(...)
+
+    message: "Integer Overflow or Wraparound (CWE-190): Unchecked arithmetic operation on integers may lead to wraparound. Ensure inputs are validated against maximum boundaries (e.g., int.MaxValue) or use checked blocks to catch OverflowException."
+    languages: [csharp]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-190']
+
+  - id: csharp-uncontrolled-resource-consumption-cwe400
+    pattern-either:
+      # Pattern 1: 建立 Regex 物件時只傳入 pattern，沒有傳入第三個參數 MatchTimeout，極易遭受 ReDoS 攻擊
+      - pattern: |
+          new FakeRegex($PATT)
+      - pattern: |
+          new FakeRegex($PATT, $OPTS)
+
+      # Pattern 2: 檔案或資料流操作中，未經大小檢查直接調用全載入方法（如 ReadAllBytes）
+      - pattern: |
+          FakeFile.ReadAllBytes($PATH)
+      - pattern: |
+          FakeFile.ReadAllText($PATH)
+
+      # Pattern 3: 遞迴處理函數中，缺乏對深度（depth）計數器的上限判定，直接進行下層遞迴呼叫
+      - pattern: |
+          public $TYPE $METHOD(..., int $DEPTH, ...)
+          {
+              ...
+              $METHOD(..., $DEPTH + 1, ...);
+              ...
+          }
+
+    message: "Uncontrolled Resource Consumption (CWE-400): Found potential resource exhaustion vectors such as Regex without MatchTimeout, unbounded file reads, or unbounded recursive calls. This can easily be exploited to cause a Denial of Service (DoS)."
+    languages: [csharp]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-400']
+
+  - id: csharp-backdoor-magic-param-cwe912
+    pattern-either:
+      # --- Pattern 1: Hardcoded secret query parameters in ASP.NET Context ---
+      - pattern: |
+          if ($REQ.Query["$PARAM"] == "$SECRET") {
+              ...
+          }
+      - pattern: |
+          if ($REQ.QueryString.Contains("$SECRET")) {
+              ...
+          }
+
+      # --- Pattern 2: Checking request parameters against hardcoded magic values ---
+      - pattern: |
+          if ($VAR == "admin_backdoor" || $VAR == "debug_override_pass") {
+              ...
+          }
+
+      # --- Pattern 3: Hidden command-line or model property backdoor triggers ---
+      - pattern: |
+          if ($MODEL.Role == "BackdoorAdmin" || $MODEL.SecretKey == "SkeletonKey") {
+              ...
+          }
+
+    message: "HttpParameterContamination / Hidden Backdoor Functionality (CWE-912): Detecting hardcoded magic parameters or backdoor keys that bypass regular authentication/authorization controls. Remove hidden control mechanisms from production code."
+    languages: [csharp]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-912']
+
+  - id: csharp-untrusted-inclusion-cwe829
+    pattern-either:
+      # --- Pattern 1: Dynamic Assembly Loading from arbitrary paths/inputs ---
+      - pattern: System.Reflection.Assembly.LoadFrom($PATH)
+      - pattern: System.Reflection.Assembly.LoadFile($PATH)
+      - pattern: Assembly.LoadFrom($PATH)
+      - pattern: Assembly.LoadFile($PATH)
+
+      # --- Pattern 2: Insecure Dynamic XML/XAML Parsing and Loading ---
+      - pattern: System.Windows.Markup.XamlReader.Load($STREAM)
+      - pattern: XamlReader.Load($STREAM)
+
+      # --- Pattern 3: Explicitly loading features over insecure HTTP channels ---
+      - pattern: |
+          $CLIENT.DownloadFile("http://" + $URL, $DEST);
+          ...
+          Assembly.LoadFrom($DEST);
+
+    message: "Inclusion of Functionality from Untrusted Control Sphere (CWE-829): Dynamic loading of assemblies, unvalidated XAML, or plugins from untrusted sources or insecure channels can lead to Arbitrary Code Execution (RCE). Validate files before inclusion or enforce strong name signing."
+    languages: [csharp]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-829']
+
+  - id: csharp-property-pollution-cwe1321
+    pattern-either:
+      # --- Pattern 1: Unsafe loop mapping key-value pairs using reflection without verification ---
+      - pattern: |
+          foreach (var $KEY in $DICT.Keys) {
+              ...
+              var $PROP = $OBJ.GetType().GetProperty($KEY);
+              $PROP.SetValue($OBJ, $DICT[$KEY]);
+          }
+
+      # --- Pattern 2: Checking string patterns for proto/constructor but missing proper enforcement ---
+      - pattern: |
+          if ($KEY == "__proto__" || $KEY == "constructor") {
+              // Missing return or exception, continuing execution leading to pollution
+              ...
+          }
+
+      # --- Pattern 3: Explicitly configuring unsafe TypeNameHandling in Newtonsoft.Json ---
+      - pattern: |
+          var $SETTINGS = new JsonSerializerSettings();
+          ...
+          $SETTINGS.TypeNameHandling = TypeNameHandling.All;
+
+    message: "Improper Control of Object Attributes / Property Pollution (CWE-1321): Dynamically setting object properties via reflection using unvalidated user keys, or enabling unsafe JSON TypeNameHandling, allows attackers to pollute application state or achieve remote code execution."
+    languages: [csharp]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-1321']
+
+  - id: csharp-improper-cert-validation-cwe295
+    pattern-either:
+      # --- Pattern 1: Global ServicePointManager bypass using Lambda expressions ---
+      - pattern: ServicePointManager.ServerCertificateValidationCallback += ($S, $CERT, $CHAIN, $ERRORS) => true
+      - pattern: ServicePointManager.ServerCertificateValidationCallback = ($S, $CERT, $CHAIN, $ERRORS) => true
+
+      # --- Pattern 2: HttpClientHandler custom callback bypass ---
+      - pattern: |
+          new HttpClientHandler {
+              ...,
+              ServerCertificateCustomValidationCallback = ($REQ, $CERT, $CHAIN, $ERRORS) => true,
+              ...
+          }
+      - pattern: $HANDLER.ServerCertificateCustomValidationCallback = ($REQ, $CERT, $CHAIN, $ERRORS) => true
+
+      # --- Pattern 3: Explicitly assigning a delegate that blindly returns true ---
+      - pattern: |
+          bool $FUNC(object $S, X509Certificate $CERT, X509Chain $CHAIN, SslPolicyErrors $ERRORS) {
+              return true;
+          }
+
+      # --- Pattern 4: WCF CertificateValidationMode set to None ---
+      - pattern: $X.ServiceCertificate.Authentication.CertificateValidationMode = X509CertificateValidationMode.None
+      - pattern: $X.ServiceCertificate.Authentication.CertificateValidationMode = 0
+
+    message: "Improper Certificate Validation (CWE-295): Trusting all certificates blindly by returning true or setting validation mode to None disables TLS protection and exposes the application to Man-in-the-Middle (MITM) attacks."
+    languages: [csharp]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-295']
+
+  - id: csharp-weak-hash-cwe328
+    pattern-either:
+      # --- Pattern 1: Direct instantiation of weak hash providers ---
+      - pattern: new System.Security.Cryptography.MD5CryptoServiceProvider(...)
+      - pattern: new System.Security.Cryptography.SHA1CryptoServiceProvider(...)
+      - pattern: new System.Security.Cryptography.SHA1Managed(...)
+      - pattern: new MD5CryptoServiceProvider(...)
+      - pattern: new SHA1CryptoServiceProvider(...)
+      - pattern: new SHA1Managed(...)
+
+      # --- Pattern 2: Factory creation methods ---
+      - pattern: System.Security.Cryptography.MD5.Create(...)
+      - pattern: System.Security.Cryptography.SHA1.Create(...)
+      - pattern: MD5.Create(...)
+      - pattern: SHA1.Create(...)
+
+      # --- Pattern 3: CryptoConfig and HashAlgorithm name-based resolution ---
+      - pattern: System.Security.Cryptography.HashAlgorithm.Create("$HASH")
+      - pattern: System.Security.Cryptography.CryptoConfig.CreateFromName("$HASH")
+      - pattern: HashAlgorithm.Create("$HASH")
+      - pattern: CryptoConfig.CreateFromName("$HASH")
+    metavariable-regex:
+      # Capture variations of MD5 and SHA1 string identifiers (case-insensitive)
+      $HASH: '^(?i)(md5|sha1|system\.security\.cryptography\.(md5|sha1))$'
+
+    message: "Use of Weak Cryptographic Hash (CWE-328): MD5 and SHA-1 algorithms are cryptographically broken and vulnerable to collision attacks. Upgrade to safer alternatives like SHA-256, SHA-384, or SHA-512."
+    languages: [csharp]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-328']

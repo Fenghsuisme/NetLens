@@ -1,0 +1,611 @@
+{
+  "model": "models/codebert_v7v8_safe",
+  "files_scanned": 50,
+  "elapsed_sec": 196.97,
+  "results": [
+    {
+      "file": "/tmp/proj/spring-petclinic/src/test/java/org/springframework/samples/petclinic/PostgresIntegrationTests.java",
+      "language": "java",
+      "confirmed": [],
+      "disputed": [],
+      "filtered": [
+        {
+          "file": "/tmp/proj/spring-petclinic/src/test/java/org/springframework/samples/petclinic/PostgresIntegrationTests.java",
+          "line": 113,
+          "snippet_start": 112,
+          "snippet_end": 135,
+          "engine_rule": "rules.java-information-exposure-cwe200",
+          "engine_cwe": "CWE-200",
+          "engine_category": "data_exfiltration",
+          "engine_category_zh": "資料外洩",
+          "snippet": "package org.springframework.samples.petclinic;\nimport static org.assertj.core.api.Assertions.assertThat;\nimport static org.junit.jupiter.api.Assertions.assertNotNull;\nimport static org.junit.jupiter.api.Assumptions.assumeTrue;\nimport java.util.Arrays;\nimport java.util.LinkedList;\nimport java.util.List;\nimport org.apache.commons.logging.Log;\nimport org.apache.commons.logging.LogFactory;\nimport org.junit.jupiter.api.BeforeAll;\nimport org.junit.jupiter.api.Test;\nimport org.junit.jupiter.api.condition.DisabledInNativeImage;\nimport org.springframework.beans.factory.annotation.Autowired;\nimport org.springframework.boot.builder.SpringApplicationBuilder;\nimport org.springframework.boot.context.event.ApplicationPreparedEvent;\nimport org.springframework.boot.restclient.RestTemplateBuilder;\nimport org.springframework.boot.test.context.SpringBootTest;\nimport org.springframework.boot.test.context.SpringBootTest.WebEnvironment;\nimport org.springframework.boot.test.web.server.LocalServerPort;\nimport org.springframework.context.ApplicationListener;\nimport org.springframework.core.env.ConfigurableEnvironment;\nimport org.springframework.core.env.EnumerablePropertySource;\nimport org.springframework.core.env.PropertySource;\nimport org.springframework.http.HttpStatus;\nimport org.springframework.http.RequestEntity;\n\n\t\t\tfor (EnumerablePropertySource<?> source : findPropertiesPropertySources()) {\n\t\t\t\tlog.info(\"PropertySource: \" + source.getName());\n\t\t\t\tString[] names = source.getPropertyNames();\n\t\t\t\tArrays.sort(names);\n\t\t\t\tfor (String name : names) {\n\t\t\t\t\tString resolved = environment.getProperty(name);\n\n\t\t\t\t\tassertNotNull(resolved, \"resolved environment property: \" + name + \" is null.\");\n\n\t\t\t\t\tObject sourceProperty = source.getProperty(name);\n\n\t\t\t\t\tassertNotNull(sourceProperty, \"source property was expecting an object but is null.\");\n\n\t\t\t\t\tassertNotNull(sourceProperty.toString(), \"source property toString() returned null.\");\n\n\t\t\t\t\tString value = sourceProperty.toString();\n\t\t\t\t\tif (resolved.equals(value)) {\n\t\t\t\t\t\tlog.info(name + \"=\" + resolved);\n\t\t\t\t\t}\n\t\t\t\t\telse {\n\t\t\t\t\t\tlog.info(name + \"=\" + value + \" OVERRIDDEN to \" + resolved);\n\t\t\t\t\t}\n\t\t\t\t}\n\t\t\t}",
+          "model_label": 0,
+          "model_name": "正常程式碼",
+          "model_conf": 0.6449055075645447,
+          "verdict": "filtered"
+        },
+        {
+          "file": "/tmp/proj/spring-petclinic/src/test/java/org/springframework/samples/petclinic/PostgresIntegrationTests.java",
+          "line": 129,
+          "snippet_start": 128,
+          "snippet_end": 130,
+          "engine_rule": "rules.java-information-exposure-cwe200",
+          "engine_cwe": "CWE-200",
+          "engine_category": "data_exfiltration",
+          "engine_category_zh": "資料外洩",
+          "snippet": "package org.springframework.samples.petclinic;\nimport static org.assertj.core.api.Assertions.assertThat;\nimport static org.junit.jupiter.api.Assertions.assertNotNull;\nimport static org.junit.jupiter.api.Assumptions.assumeTrue;\nimport java.util.Arrays;\nimport java.util.LinkedList;\nimport java.util.List;\nimport org.apache.commons.logging.Log;\nimport org.apache.commons.logging.LogFactory;\nimport org.junit.jupiter.api.BeforeAll;\nimport org.junit.jupiter.api.Test;\nimport org.junit.jupiter.api.condition.DisabledInNativeImage;\nimport org.springframework.beans.factory.annotation.Autowired;\nimport org.springframework.boot.builder.SpringApplicationBuilder;\nimport org.springframework.boot.context.event.ApplicationPreparedEvent;\nimport org.springframework.boot.restclient.RestTemplateBuilder;\nimport org.springframework.boot.test.context.SpringBootTest;\nimport org.springframework.boot.test.context.SpringBootTest.WebEnvironment;\nimport org.springframework.boot.test.web.server.LocalServerPort;\nimport org.springframework.context.ApplicationListener;\nimport org.springframework.core.env.ConfigurableEnvironment;\nimport org.springframework.core.env.EnumerablePropertySource;\nimport org.springframework.core.env.PropertySource;\nimport org.springframework.http.HttpStatus;\nimport org.springframework.http.RequestEntity;\n\n\t\t\t\t\tif (resolved.equals(value)) {\n\t\t\t\t\t\tlog.info(name + \"=\" + resolved);\n\t\t\t\t\t}",
+          "model_label": 0,
+          "model_name": "正常程式碼",
+          "model_conf": 0.8010321855545044,
+          "verdict": "filtered"
+        },
+        {
+          "file": "/tmp/proj/spring-petclinic/src/test/java/org/springframework/samples/petclinic/PostgresIntegrationTests.java",
+          "line": 132,
+          "snippet_start": 128,
+          "snippet_end": 130,
+          "engine_rule": "rules.java-information-exposure-cwe200",
+          "engine_cwe": "CWE-200",
+          "engine_category": "data_exfiltration",
+          "engine_category_zh": "資料外洩",
+          "snippet": "package org.springframework.samples.petclinic;\nimport static org.assertj.core.api.Assertions.assertThat;\nimport static org.junit.jupiter.api.Assertions.assertNotNull;\nimport static org.junit.jupiter.api.Assumptions.assumeTrue;\nimport java.util.Arrays;\nimport java.util.LinkedList;\nimport java.util.List;\nimport org.apache.commons.logging.Log;\nimport org.apache.commons.logging.LogFactory;\nimport org.junit.jupiter.api.BeforeAll;\nimport org.junit.jupiter.api.Test;\nimport org.junit.jupiter.api.condition.DisabledInNativeImage;\nimport org.springframework.beans.factory.annotation.Autowired;\nimport org.springframework.boot.builder.SpringApplicationBuilder;\nimport org.springframework.boot.context.event.ApplicationPreparedEvent;\nimport org.springframework.boot.restclient.RestTemplateBuilder;\nimport org.springframework.boot.test.context.SpringBootTest;\nimport org.springframework.boot.test.context.SpringBootTest.WebEnvironment;\nimport org.springframework.boot.test.web.server.LocalServerPort;\nimport org.springframework.context.ApplicationListener;\nimport org.springframework.core.env.ConfigurableEnvironment;\nimport org.springframework.core.env.EnumerablePropertySource;\nimport org.springframework.core.env.PropertySource;\nimport org.springframework.http.HttpStatus;\nimport org.springframework.http.RequestEntity;\n\n\t\t\t\t\tif (resolved.equals(value)) {\n\t\t\t\t\t\tlog.info(name + \"=\" + resolved);\n\t\t\t\t\t}",
+          "model_label": 0,
+          "model_name": "正常程式碼",
+          "model_conf": 0.8010321855545044,
+          "verdict": "filtered"
+        }
+      ],
+      "engine_only": [],
+      "skipped": []
+    },
+    {
+      "file": "/tmp/proj/spring-petclinic/src/test/java/org/springframework/samples/petclinic/MySqlIntegrationTests.java",
+      "language": "java",
+      "confirmed": [],
+      "disputed": [],
+      "filtered": [],
+      "engine_only": [],
+      "skipped": []
+    },
+    {
+      "file": "/tmp/proj/spring-petclinic/src/test/java/org/springframework/samples/petclinic/MysqlTestApplication.java",
+      "language": "java",
+      "confirmed": [],
+      "disputed": [],
+      "filtered": [],
+      "engine_only": [],
+      "skipped": []
+    },
+    {
+      "file": "/tmp/proj/spring-petclinic/src/test/java/org/springframework/samples/petclinic/PetClinicConcurrencyTests.java",
+      "language": "java",
+      "confirmed": [],
+      "disputed": [],
+      "filtered": [
+        {
+          "file": "/tmp/proj/spring-petclinic/src/test/java/org/springframework/samples/petclinic/PetClinicConcurrencyTests.java",
+          "line": 118,
+          "snippet_start": 94,
+          "snippet_end": 96,
+          "engine_rule": "rules.java-information-exposure-cwe200",
+          "engine_cwe": "CWE-200",
+          "engine_category": "data_exfiltration",
+          "engine_category_zh": "資料外洩",
+          "snippet": "package org.springframework.samples.petclinic;\nimport static org.assertj.core.api.Assertions.assertThat;\nimport java.util.Optional;\nimport java.util.concurrent.CountDownLatch;\nimport java.util.concurrent.ExecutorService;\nimport java.util.concurrent.Executors;\nimport java.util.concurrent.TimeUnit;\nimport java.util.concurrent.atomic.AtomicInteger;\nimport org.junit.jupiter.api.Test;\nimport org.springframework.beans.factory.annotation.Autowired;\nimport org.springframework.boot.test.context.SpringBootTest;\nimport org.springframework.boot.test.context.SpringBootTest.WebEnvironment;\nimport org.springframework.boot.test.web.server.LocalServerPort;\nimport org.springframework.boot.restclient.RestTemplateBuilder;\nimport org.springframework.http.HttpEntity;\nimport org.springframework.http.HttpHeaders;\nimport org.springframework.http.MediaType;\nimport org.springframework.http.ResponseEntity;\nimport org.springframework.samples.petclinic.owner.Owner;\nimport org.springframework.samples.petclinic.owner.OwnerRepository;\nimport org.springframework.util.LinkedMultiValueMap;\nimport org.springframework.util.MultiValueMap;\nimport org.springframework.web.client.RestTemplate;\n\n\t\t\t\tcatch (Exception e) {\n\t\t\t\t\tfailureCount.incrementAndGet();\n\t\t\t\t}",
+          "model_label": 0,
+          "model_name": "正常程式碼",
+          "model_conf": 0.9977238774299622,
+          "verdict": "filtered"
+        },
+        {
+          "file": "/tmp/proj/spring-petclinic/src/test/java/org/springframework/samples/petclinic/PetClinicConcurrencyTests.java",
+          "line": 119,
+          "snippet_start": 94,
+          "snippet_end": 96,
+          "engine_rule": "rules.java-information-exposure-cwe200",
+          "engine_cwe": "CWE-200",
+          "engine_category": "data_exfiltration",
+          "engine_category_zh": "資料外洩",
+          "snippet": "package org.springframework.samples.petclinic;\nimport static org.assertj.core.api.Assertions.assertThat;\nimport java.util.Optional;\nimport java.util.concurrent.CountDownLatch;\nimport java.util.concurrent.ExecutorService;\nimport java.util.concurrent.Executors;\nimport java.util.concurrent.TimeUnit;\nimport java.util.concurrent.atomic.AtomicInteger;\nimport org.junit.jupiter.api.Test;\nimport org.springframework.beans.factory.annotation.Autowired;\nimport org.springframework.boot.test.context.SpringBootTest;\nimport org.springframework.boot.test.context.SpringBootTest.WebEnvironment;\nimport org.springframework.boot.test.web.server.LocalServerPort;\nimport org.springframework.boot.restclient.RestTemplateBuilder;\nimport org.springframework.http.HttpEntity;\nimport org.springframework.http.HttpHeaders;\nimport org.springframework.http.MediaType;\nimport org.springframework.http.ResponseEntity;\nimport org.springframework.samples.petclinic.owner.Owner;\nimport org.springframework.samples.petclinic.owner.OwnerRepository;\nimport org.springframework.util.LinkedMultiValueMap;\nimport org.springframework.util.MultiValueMap;\nimport org.springframework.web.client.RestTemplate;\n\n\t\t\t\tcatch (Exception e) {\n\t\t\t\t\tfailureCount.incrementAndGet();\n\t\t\t\t}",
+          "model_label": 0,
+          "model_name": "正常程式碼",
+          "model_conf": 0.9977238774299622,
+          "verdict": "filtered"
+        },
+        {
+          "file": "/tmp/proj/spring-petclinic/src/test/java/org/springframework/samples/petclinic/PetClinicConcurrencyTests.java",
+          "line": 120,
+          "snippet_start": 94,
+          "snippet_end": 96,
+          "engine_rule": "rules.java-information-exposure-cwe200",
+          "engine_cwe": "CWE-200",
+          "engine_category": "data_exfiltration",
+          "engine_category_zh": "資料外洩",
+          "snippet": "package org.springframework.samples.petclinic;\nimport static org.assertj.core.api.Assertions.assertThat;\nimport java.util.Optional;\nimport java.util.concurrent.CountDownLatch;\nimport java.util.concurrent.ExecutorService;\nimport java.util.concurrent.Executors;\nimport java.util.concurrent.TimeUnit;\nimport java.util.concurrent.atomic.AtomicInteger;\nimport org.junit.jupiter.api.Test;\nimport org.springframework.beans.factory.annotation.Autowired;\nimport org.springframework.boot.test.context.SpringBootTest;\nimport org.springframework.boot.test.context.SpringBootTest.WebEnvironment;\nimport org.springframework.boot.test.web.server.LocalServerPort;\nimport org.springframework.boot.restclient.RestTemplateBuilder;\nimport org.springframework.http.HttpEntity;\nimport org.springframework.http.HttpHeaders;\nimport org.springframework.http.MediaType;\nimport org.springframework.http.ResponseEntity;\nimport org.springframework.samples.petclinic.owner.Owner;\nimport org.springframework.samples.petclinic.owner.OwnerRepository;\nimport org.springframework.util.LinkedMultiValueMap;\nimport org.springframework.util.MultiValueMap;\nimport org.springframework.web.client.RestTemplate;\n\n\t\t\t\tcatch (Exception e) {\n\t\t\t\t\tfailureCount.incrementAndGet();\n\t\t\t\t}",
+          "model_label": 0,
+          "model_name": "正常程式碼",
+          "model_conf": 0.9977238774299622,
+          "verdict": "filtered"
+        },
+        {
+          "file": "/tmp/proj/spring-petclinic/src/test/java/org/springframework/samples/petclinic/PetClinicConcurrencyTests.java",
+          "line": 121,
+          "snippet_start": 94,
+          "snippet_end": 96,
+          "engine_rule": "rules.java-information-exposure-cwe200",
+          "engine_cwe": "CWE-200",
+          "engine_category": "data_exfiltration",
+          "engine_category_zh": "資料外洩",
+          "snippet": "package org.springframework.samples.petclinic;\nimport static org.assertj.core.api.Assertions.assertThat;\nimport java.util.Optional;\nimport java.util.concurrent.CountDownLatch;\nimport java.util.concurrent.ExecutorService;\nimport java.util.concurrent.Executors;\nimport java.util.concurrent.TimeUnit;\nimport java.util.concurrent.atomic.AtomicInteger;\nimport org.junit.jupiter.api.Test;\nimport org.springframework.beans.factory.annotation.Autowired;\nimport org.springframework.boot.test.context.SpringBootTest;\nimport org.springframework.boot.test.context.SpringBootTest.WebEnvironment;\nimport org.springframework.boot.test.web.server.LocalServerPort;\nimport org.springframework.boot.restclient.RestTemplateBuilder;\nimport org.springframework.http.HttpEntity;\nimport org.springframework.http.HttpHeaders;\nimport org.springframework.http.MediaType;\nimport org.springframework.http.ResponseEntity;\nimport org.springframework.samples.petclinic.owner.Owner;\nimport org.springframework.samples.petclinic.owner.OwnerRepository;\nimport org.springframework.util.LinkedMultiValueMap;\nimport org.springframework.util.MultiValueMap;\nimport org.springframework.web.client.RestTemplate;\n\n\t\t\t\tcatch (Exception e) {\n\t\t\t\t\tfailureCount.incrementAndGet();\n\t\t\t\t}",
+          "model_label": 0,
+          "model_name": "正常程式碼",
+          "model_conf": 0.9977238774299622,
+          "verdict": "filtered"
+        }
+      ],
+      "engine_only": [],
+      "skipped": []
+    },
+    {
+      "file": "/tmp/proj/spring-petclinic/src/test/java/org/springframework/samples/petclinic/PetClinicIntegrationTests.java",
+      "language": "java",
+      "confirmed": [],
+      "disputed": [],
+      "filtered": [],
+      "engine_only": [],
+      "skipped": []
+    },
+    {
+      "file": "/tmp/proj/spring-petclinic/src/test/java/org/springframework/samples/petclinic/vet/VetTests.java",
+      "language": "java",
+      "confirmed": [],
+      "disputed": [],
+      "filtered": [],
+      "engine_only": [],
+      "skipped": []
+    },
+    {
+      "file": "/tmp/proj/spring-petclinic/src/test/java/org/springframework/samples/petclinic/vet/VetControllerTests.java",
+      "language": "java",
+      "confirmed": [],
+      "disputed": [],
+      "filtered": [],
+      "engine_only": [],
+      "skipped": []
+    },
+    {
+      "file": "/tmp/proj/spring-petclinic/src/test/java/org/springframework/samples/petclinic/system/CrashControllerIntegrationTests.java",
+      "language": "java",
+      "confirmed": [],
+      "disputed": [],
+      "filtered": [],
+      "engine_only": [],
+      "skipped": []
+    },
+    {
+      "file": "/tmp/proj/spring-petclinic/src/test/java/org/springframework/samples/petclinic/system/WelcomeControllerTests.java",
+      "language": "java",
+      "confirmed": [],
+      "disputed": [],
+      "filtered": [],
+      "engine_only": [],
+      "skipped": []
+    },
+    {
+      "file": "/tmp/proj/spring-petclinic/src/test/java/org/springframework/samples/petclinic/system/I18nPropertiesSyncTest.java",
+      "language": "java",
+      "confirmed": [],
+      "disputed": [],
+      "filtered": [],
+      "engine_only": [],
+      "skipped": []
+    },
+    {
+      "file": "/tmp/proj/spring-petclinic/src/test/java/org/springframework/samples/petclinic/system/CrashControllerTests.java",
+      "language": "java",
+      "confirmed": [],
+      "disputed": [],
+      "filtered": [],
+      "engine_only": [],
+      "skipped": []
+    },
+    {
+      "file": "/tmp/proj/spring-petclinic/src/test/java/org/springframework/samples/petclinic/service/ClinicServiceTests.java",
+      "language": "java",
+      "confirmed": [],
+      "disputed": [],
+      "filtered": [],
+      "engine_only": [],
+      "skipped": []
+    },
+    {
+      "file": "/tmp/proj/spring-petclinic/src/test/java/org/springframework/samples/petclinic/service/EntityUtils.java",
+      "language": "java",
+      "confirmed": [],
+      "disputed": [],
+      "filtered": [],
+      "engine_only": [],
+      "skipped": []
+    },
+    {
+      "file": "/tmp/proj/spring-petclinic/src/test/java/org/springframework/samples/petclinic/model/ValidatorTests.java",
+      "language": "java",
+      "confirmed": [],
+      "disputed": [],
+      "filtered": [],
+      "engine_only": [],
+      "skipped": []
+    },
+    {
+      "file": "/tmp/proj/spring-petclinic/src/test/java/org/springframework/samples/petclinic/owner/PetTypeFormatterTests.java",
+      "language": "java",
+      "confirmed": [],
+      "disputed": [],
+      "filtered": [],
+      "engine_only": [],
+      "skipped": []
+    },
+    {
+      "file": "/tmp/proj/spring-petclinic/src/test/java/org/springframework/samples/petclinic/owner/OwnerTests.java",
+      "language": "java",
+      "confirmed": [],
+      "disputed": [],
+      "filtered": [],
+      "engine_only": [],
+      "skipped": []
+    },
+    {
+      "file": "/tmp/proj/spring-petclinic/src/test/java/org/springframework/samples/petclinic/owner/PetValidatorTests.java",
+      "language": "java",
+      "confirmed": [],
+      "disputed": [],
+      "filtered": [],
+      "engine_only": [],
+      "skipped": []
+    },
+    {
+      "file": "/tmp/proj/spring-petclinic/src/test/java/org/springframework/samples/petclinic/owner/VisitControllerTests.java",
+      "language": "java",
+      "confirmed": [],
+      "disputed": [],
+      "filtered": [],
+      "engine_only": [],
+      "skipped": []
+    },
+    {
+      "file": "/tmp/proj/spring-petclinic/src/test/java/org/springframework/samples/petclinic/owner/OwnerControllerTests.java",
+      "language": "java",
+      "confirmed": [],
+      "disputed": [],
+      "filtered": [],
+      "engine_only": [],
+      "skipped": []
+    },
+    {
+      "file": "/tmp/proj/spring-petclinic/src/test/java/org/springframework/samples/petclinic/owner/PetControllerTests.java",
+      "language": "java",
+      "confirmed": [],
+      "disputed": [],
+      "filtered": [],
+      "engine_only": [],
+      "skipped": []
+    },
+    {
+      "file": "/tmp/proj/spring-petclinic/src/main/java/org/springframework/samples/petclinic/PetClinicRuntimeHints.java",
+      "language": "java",
+      "confirmed": [],
+      "disputed": [],
+      "filtered": [],
+      "engine_only": [],
+      "skipped": []
+    },
+    {
+      "file": "/tmp/proj/spring-petclinic/src/main/java/org/springframework/samples/petclinic/PetClinicApplication.java",
+      "language": "java",
+      "confirmed": [],
+      "disputed": [],
+      "filtered": [],
+      "engine_only": [],
+      "skipped": []
+    },
+    {
+      "file": "/tmp/proj/spring-petclinic/src/main/java/org/springframework/samples/petclinic/package-info.java",
+      "language": "java",
+      "confirmed": [],
+      "disputed": [],
+      "filtered": [],
+      "engine_only": [],
+      "skipped": []
+    },
+    {
+      "file": "/tmp/proj/spring-petclinic/src/main/java/org/springframework/samples/petclinic/vet/VetRepository.java",
+      "language": "java",
+      "confirmed": [],
+      "disputed": [],
+      "filtered": [],
+      "engine_only": [],
+      "skipped": []
+    },
+    {
+      "file": "/tmp/proj/spring-petclinic/src/main/java/org/springframework/samples/petclinic/vet/VetController.java",
+      "language": "java",
+      "confirmed": [],
+      "disputed": [],
+      "filtered": [],
+      "engine_only": [],
+      "skipped": []
+    },
+    {
+      "file": "/tmp/proj/spring-petclinic/src/main/java/org/springframework/samples/petclinic/vet/package-info.java",
+      "language": "java",
+      "confirmed": [],
+      "disputed": [],
+      "filtered": [],
+      "engine_only": [],
+      "skipped": []
+    },
+    {
+      "file": "/tmp/proj/spring-petclinic/src/main/java/org/springframework/samples/petclinic/vet/Vets.java",
+      "language": "java",
+      "confirmed": [],
+      "disputed": [],
+      "filtered": [],
+      "engine_only": [],
+      "skipped": []
+    },
+    {
+      "file": "/tmp/proj/spring-petclinic/src/main/java/org/springframework/samples/petclinic/vet/Specialty.java",
+      "language": "java",
+      "confirmed": [],
+      "disputed": [],
+      "filtered": [],
+      "engine_only": [],
+      "skipped": []
+    },
+    {
+      "file": "/tmp/proj/spring-petclinic/src/main/java/org/springframework/samples/petclinic/vet/Vet.java",
+      "language": "java",
+      "confirmed": [],
+      "disputed": [],
+      "filtered": [],
+      "engine_only": [],
+      "skipped": []
+    },
+    {
+      "file": "/tmp/proj/spring-petclinic/src/main/java/org/springframework/samples/petclinic/system/CrashController.java",
+      "language": "java",
+      "confirmed": [],
+      "disputed": [],
+      "filtered": [],
+      "engine_only": [],
+      "skipped": []
+    },
+    {
+      "file": "/tmp/proj/spring-petclinic/src/main/java/org/springframework/samples/petclinic/system/WelcomeController.java",
+      "language": "java",
+      "confirmed": [],
+      "disputed": [],
+      "filtered": [],
+      "engine_only": [],
+      "skipped": []
+    },
+    {
+      "file": "/tmp/proj/spring-petclinic/src/main/java/org/springframework/samples/petclinic/system/CacheConfiguration.java",
+      "language": "java",
+      "confirmed": [],
+      "disputed": [],
+      "filtered": [],
+      "engine_only": [],
+      "skipped": []
+    },
+    {
+      "file": "/tmp/proj/spring-petclinic/src/main/java/org/springframework/samples/petclinic/system/package-info.java",
+      "language": "java",
+      "confirmed": [],
+      "disputed": [],
+      "filtered": [],
+      "engine_only": [],
+      "skipped": []
+    },
+    {
+      "file": "/tmp/proj/spring-petclinic/src/main/java/org/springframework/samples/petclinic/system/WebConfiguration.java",
+      "language": "java",
+      "confirmed": [],
+      "disputed": [],
+      "filtered": [],
+      "engine_only": [],
+      "skipped": []
+    },
+    {
+      "file": "/tmp/proj/spring-petclinic/src/main/java/org/springframework/samples/petclinic/model/Person.java",
+      "language": "java",
+      "confirmed": [],
+      "disputed": [],
+      "filtered": [],
+      "engine_only": [],
+      "skipped": []
+    },
+    {
+      "file": "/tmp/proj/spring-petclinic/src/main/java/org/springframework/samples/petclinic/model/NamedEntity.java",
+      "language": "java",
+      "confirmed": [],
+      "disputed": [],
+      "filtered": [],
+      "engine_only": [],
+      "skipped": []
+    },
+    {
+      "file": "/tmp/proj/spring-petclinic/src/main/java/org/springframework/samples/petclinic/model/BaseEntity.java",
+      "language": "java",
+      "confirmed": [],
+      "disputed": [],
+      "filtered": [],
+      "engine_only": [],
+      "skipped": []
+    },
+    {
+      "file": "/tmp/proj/spring-petclinic/src/main/java/org/springframework/samples/petclinic/model/package-info.java",
+      "language": "java",
+      "confirmed": [],
+      "disputed": [],
+      "filtered": [],
+      "engine_only": [],
+      "skipped": []
+    },
+    {
+      "file": "/tmp/proj/spring-petclinic/src/main/java/org/springframework/samples/petclinic/owner/VisitController.java",
+      "language": "java",
+      "confirmed": [],
+      "disputed": [],
+      "filtered": [
+        {
+          "file": "/tmp/proj/spring-petclinic/src/main/java/org/springframework/samples/petclinic/owner/VisitController.java",
+          "line": 109,
+          "snippet_start": 104,
+          "snippet_end": 106,
+          "engine_rule": "rules.supplement-csrf-spring-state-change",
+          "engine_cwe": "CWE-352",
+          "engine_category": "csrf",
+          "engine_category_zh": "跨站請求偽造",
+          "snippet": "package org.springframework.samples.petclinic.owner;\nimport java.time.LocalDate;\nimport java.util.Map;\nimport java.util.Optional;\nimport org.springframework.stereotype.Controller;\nimport org.springframework.validation.BindingResult;\nimport org.springframework.web.bind.WebDataBinder;\nimport org.springframework.web.bind.annotation.GetMapping;\nimport org.springframework.web.bind.annotation.InitBinder;\nimport org.springframework.web.bind.annotation.ModelAttribute;\nimport org.springframework.web.bind.annotation.PathVariable;\nimport org.springframework.web.bind.annotation.PostMapping;\nimport jakarta.validation.Valid;\nimport org.springframework.web.servlet.mvc.support.RedirectAttributes;\n\n\t\tif (result.hasErrors()) {\n\t\t\treturn \"pets/createOrUpdateVisitForm\";\n\t\t}",
+          "model_label": 0,
+          "model_name": "正常程式碼",
+          "model_conf": 0.9893550872802734,
+          "verdict": "filtered"
+        }
+      ],
+      "engine_only": [],
+      "skipped": []
+    },
+    {
+      "file": "/tmp/proj/spring-petclinic/src/main/java/org/springframework/samples/petclinic/owner/OwnerController.java",
+      "language": "java",
+      "confirmed": [],
+      "disputed": [],
+      "filtered": [
+        {
+          "file": "/tmp/proj/spring-petclinic/src/main/java/org/springframework/samples/petclinic/owner/OwnerController.java",
+          "line": 84,
+          "snippet_start": 79,
+          "snippet_end": 82,
+          "engine_rule": "rules.supplement-csrf-spring-state-change",
+          "engine_cwe": "CWE-352",
+          "engine_category": "csrf",
+          "engine_category_zh": "跨站請求偽造",
+          "snippet": "package org.springframework.samples.petclinic.owner;\nimport java.util.List;\nimport java.util.Objects;\nimport java.util.Optional;\nimport org.springframework.data.domain.Page;\nimport org.springframework.data.domain.PageRequest;\nimport org.springframework.data.domain.Pageable;\nimport org.springframework.stereotype.Controller;\nimport org.springframework.ui.Model;\nimport org.springframework.validation.BindingResult;\nimport org.springframework.web.bind.WebDataBinder;\nimport org.springframework.web.bind.annotation.GetMapping;\nimport org.springframework.web.bind.annotation.InitBinder;\nimport org.springframework.web.bind.annotation.ModelAttribute;\nimport org.springframework.web.bind.annotation.PathVariable;\nimport org.springframework.web.bind.annotation.PostMapping;\nimport org.springframework.web.bind.annotation.RequestParam;\nimport org.springframework.web.servlet.ModelAndView;\nimport jakarta.validation.Valid;\nimport org.springframework.web.servlet.mvc.support.RedirectAttributes;\n\n\t\tif (result.hasErrors()) {\n\t\t\tredirectAttributes.addFlashAttribute(\"error\", \"There was an error in creating the owner.\");\n\t\t\treturn VIEWS_OWNER_CREATE_OR_UPDATE_FORM;\n\t\t}",
+          "model_label": 0,
+          "model_name": "正常程式碼",
+          "model_conf": 0.9896232485771179,
+          "verdict": "filtered"
+        },
+        {
+          "file": "/tmp/proj/spring-petclinic/src/main/java/org/springframework/samples/petclinic/owner/OwnerController.java",
+          "line": 159,
+          "snippet_start": 152,
+          "snippet_end": 156,
+          "engine_rule": "rules.supplement-csrf-spring-state-change",
+          "engine_cwe": "CWE-352",
+          "engine_category": "csrf",
+          "engine_category_zh": "跨站請求偽造",
+          "snippet": "package org.springframework.samples.petclinic.owner;\nimport java.util.List;\nimport java.util.Objects;\nimport java.util.Optional;\nimport org.springframework.data.domain.Page;\nimport org.springframework.data.domain.PageRequest;\nimport org.springframework.data.domain.Pageable;\nimport org.springframework.stereotype.Controller;\nimport org.springframework.ui.Model;\nimport org.springframework.validation.BindingResult;\nimport org.springframework.web.bind.WebDataBinder;\nimport org.springframework.web.bind.annotation.GetMapping;\nimport org.springframework.web.bind.annotation.InitBinder;\nimport org.springframework.web.bind.annotation.ModelAttribute;\nimport org.springframework.web.bind.annotation.PathVariable;\nimport org.springframework.web.bind.annotation.PostMapping;\nimport org.springframework.web.bind.annotation.RequestParam;\nimport org.springframework.web.servlet.ModelAndView;\nimport jakarta.validation.Valid;\nimport org.springframework.web.servlet.mvc.support.RedirectAttributes;\n\n\t\tif (!Objects.equals(owner.getId(), ownerId)) {\n\t\t\tresult.rejectValue(\"id\", \"mismatch\", \"The owner ID in the form does not match the URL.\");\n\t\t\tredirectAttributes.addFlashAttribute(\"error\", \"Owner ID mismatch. Please try again.\");\n\t\t\treturn \"redirect:/owners/{ownerId}/edit\";\n\t\t}",
+          "model_label": 0,
+          "model_name": "正常程式碼",
+          "model_conf": 0.9995542168617249,
+          "verdict": "filtered"
+        }
+      ],
+      "engine_only": [],
+      "skipped": []
+    },
+    {
+      "file": "/tmp/proj/spring-petclinic/src/main/java/org/springframework/samples/petclinic/owner/Visit.java",
+      "language": "java",
+      "confirmed": [],
+      "disputed": [],
+      "filtered": [],
+      "engine_only": [],
+      "skipped": []
+    },
+    {
+      "file": "/tmp/proj/spring-petclinic/src/main/java/org/springframework/samples/petclinic/owner/Owner.java",
+      "language": "java",
+      "confirmed": [],
+      "disputed": [],
+      "filtered": [],
+      "engine_only": [],
+      "skipped": []
+    },
+    {
+      "file": "/tmp/proj/spring-petclinic/src/main/java/org/springframework/samples/petclinic/owner/PetController.java",
+      "language": "java",
+      "confirmed": [],
+      "disputed": [],
+      "filtered": [],
+      "engine_only": [],
+      "skipped": []
+    },
+    {
+      "file": "/tmp/proj/spring-petclinic/src/main/java/org/springframework/samples/petclinic/owner/PetTypeFormatter.java",
+      "language": "java",
+      "confirmed": [],
+      "disputed": [],
+      "filtered": [],
+      "engine_only": [],
+      "skipped": []
+    },
+    {
+      "file": "/tmp/proj/spring-petclinic/src/main/java/org/springframework/samples/petclinic/owner/PetValidator.java",
+      "language": "java",
+      "confirmed": [],
+      "disputed": [],
+      "filtered": [],
+      "engine_only": [],
+      "skipped": []
+    },
+    {
+      "file": "/tmp/proj/spring-petclinic/src/main/java/org/springframework/samples/petclinic/owner/Pet.java",
+      "language": "java",
+      "confirmed": [],
+      "disputed": [],
+      "filtered": [],
+      "engine_only": [],
+      "skipped": []
+    },
+    {
+      "file": "/tmp/proj/spring-petclinic/src/main/java/org/springframework/samples/petclinic/owner/PetType.java",
+      "language": "java",
+      "confirmed": [],
+      "disputed": [],
+      "filtered": [],
+      "engine_only": [],
+      "skipped": []
+    },
+    {
+      "file": "/tmp/proj/spring-petclinic/src/main/java/org/springframework/samples/petclinic/owner/PetTypeRepository.java",
+      "language": "java",
+      "confirmed": [],
+      "disputed": [],
+      "filtered": [],
+      "engine_only": [],
+      "skipped": []
+    },
+    {
+      "file": "/tmp/proj/spring-petclinic/src/main/java/org/springframework/samples/petclinic/owner/package-info.java",
+      "language": "java",
+      "confirmed": [],
+      "disputed": [],
+      "filtered": [],
+      "engine_only": [],
+      "skipped": []
+    },
+    {
+      "file": "/tmp/proj/spring-petclinic/src/main/java/org/springframework/samples/petclinic/owner/OwnerRepository.java",
+      "language": "java",
+      "confirmed": [],
+      "disputed": [],
+      "filtered": [],
+      "engine_only": [],
+      "skipped": []
+    }
+  ]
+}

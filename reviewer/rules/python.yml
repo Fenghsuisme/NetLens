@@ -1,0 +1,524 @@
+rules:
+- id: command-injection
+  pattern-either:
+  - pattern: os.system(...)
+  - pattern: os.popen(...)
+  # 尾端須加 ... 才能匹配 shell=True 後仍有 kwargs 的呼叫
+  # （subprocess.run(cmd, shell=True, check=True) 舊版會漏）
+  - pattern: subprocess.run(..., shell=True, ...)
+  - pattern: subprocess.call(..., shell=True, ...)
+  - pattern: subprocess.check_call(..., shell=True, ...)
+  - pattern: subprocess.check_output(..., shell=True, ...)
+  - pattern: subprocess.Popen(..., shell=True, ...)
+  message: 'Command injection risk (CWE-78): Unvalidated user inputs passed to system
+    shell can lead to arbitrary code execution.'
+  languages:
+  - python
+  severity: ERROR
+  metadata:
+    cwe:
+    - CWE-78
+- id: code-execution
+  pattern-either:
+  - pattern: eval(...)
+  - pattern: exec(...)
+  - pattern: compile(..., ..., 'exec')
+  - pattern: compile(..., ..., 'eval')
+  pattern-not:
+  - pattern: ast.literal_eval(...)
+  message: 'Code execution risk (CWE-94): Passing untrusted strings to interpreter
+    primitives allows arbitrary code injection.'
+  languages:
+  - python
+  severity: ERROR
+  metadata:
+    cwe:
+    - CWE-94
+- id: weak-hash
+  pattern-either:
+  - pattern: hashlib.md5(...)
+  - pattern: hashlib.sha1(...)
+  message: Weak hash algorithm (CWE-328)
+  languages:
+  - python
+  severity: WARNING
+  metadata:
+    cwe:
+    - CWE-328
+- id: hardcoded-secrets
+  pattern-either:
+  - pattern: password = "..."
+  - pattern: secret = "..."
+  - pattern: api_key = "..."
+  message: Hardcoded secret detected (CWE-798)
+  languages:
+  - python
+  severity: ERROR
+  metadata:
+    cwe:
+    - CWE-798
+- id: python-information-exposure-cwe200
+  # 舊版 `str($E)` 匹配「每一個 str() 呼叫」（str(count)/str(id)…），是真實碼上
+  # 最大的單一 FP 源（bench 94 個）。收窄為「str(例外變數)」——只在 except ... as $E
+  # 情境才報，捕捉 return jsonify({"error": str(e)}) 這種例外細節外洩，不再誤中一般 str()。
+  pattern-either:
+  - pattern: traceback.format_exc(...)
+  - patterns:
+    - pattern: str($E)
+    - pattern-inside: |
+        try:
+            ...
+        except $EXC as $E:
+            ...
+  message: 'Exposure of Sensitive Information to an Unauthorized Actor (CWE-200):
+    Returning raw exception details, stack traces, or fully serialized object dicts
+    leaks internal state.'
+  languages:
+  - python
+  severity: ERROR
+  metadata:
+    cwe:
+    - CWE-200
+- id: python-deserialization-cwe502
+  pattern-either:
+  - pattern: pickle.loads(...)
+  - pattern: pickle.load(...)
+  - pattern: marshal.loads(...)
+  - pattern: shelve.open(...)
+  - pattern: yaml.load(...)
+  pattern-not:
+  - pattern: yaml.load(..., Loader=yaml.SafeLoader)
+  - pattern: yaml.safe_load(...)
+  message: 'Deserialization of Untrusted Data risk (CWE-502): Deserializing untrusted
+    data using pickle, marshal, or unsafe yaml configurations can lead to arbitrary
+    code execution during object reconstruction.'
+  languages:
+  - python
+  severity: ERROR
+  metadata:
+    cwe:
+    - CWE-502
+- id: disabled-ssl
+  pattern-either:
+  - pattern: requests.get(..., verify=False, ...)
+  - pattern: requests.post(..., verify=False, ...)
+  - pattern: httpx.get(..., verify=False, ...)
+  - pattern: httpx.post(..., verify=False, ...)
+  message: SSL verification is disabled (CWE-295)
+  languages:
+  - python
+  severity: ERROR
+  metadata:
+    cwe:
+    - CWE-295
+- id: sql-injection
+  # $DB 與 $CURSOR 都是 metavariable，兩者匹配範圍完全相同，去重留一條。
+  # pattern-not 排除確定安全的形式：參數化查詢與純字面量查詢。
+  # 拼接（$A + $B）與 f-string 不匹配 "..."，故不受影響，仍會命中。
+  patterns:
+  - pattern: $CURSOR.execute(...)
+  - pattern-not: $CURSOR.execute("...", ...)
+  - pattern-not: $CURSOR.execute("...")
+  message: SQL Injection risk (CWE-89)
+  languages:
+  - python
+  severity: ERROR
+  metadata:
+    cwe:
+    - CWE-89
+- id: xss-injection
+  pattern-either:
+  - pattern: flask.render_template_string(...)
+  - pattern: jinja2.Template(...).render(...)
+  - pattern: django.utils.safestring.mark_safe(...)
+  message: Cross-site Scripting risk (CWE-79)
+  languages:
+  - python
+  severity: ERROR
+  metadata:
+    cwe:
+    - CWE-79
+- id: csrf-config-risk
+  pattern-either:
+  - pattern: $APP.config['WTF_CSRF_ENABLED'] = False
+  - pattern: csrf_enabled = False
+  - pattern: samesite = "samesite='None'"
+  - pattern: samesite_alt = 'samesite="None"'
+  message: CSRF Protection is disabled or misconfigured (CWE-352)
+  languages:
+  - python
+  severity: ERROR
+  metadata:
+    cwe:
+    - CWE-352
+- id: missing-authorization
+  pattern-either:
+  - pattern: allow_anonymous = True
+  - pattern: "def $ROUTE(request):\n    ...\n    $OBJ = request.GET.get('id')\n  \
+      \  return $OBJ\n"
+  message: Missing Authorization risk (CWE-862)
+  languages:
+  - python
+  severity: ERROR
+  metadata:
+    cwe:
+    - CWE-862
+- id: path-traversal
+  pattern-either:
+  - pattern: open("..." + $VAR, ...)
+  - pattern: open(f"...{$VAR}...", ...)
+  - pattern: os.path.join(..., $VAR)
+  - pattern: $PATH.joinpath(..., $VAR)
+  - pattern: os.open("..." + $VAR, ...)
+  - pattern: $ZIP.extractall(...)
+  - pattern: $TAR.extractall(...)
+  message: Path Traversal / Zip Slip risk (CWE-22)
+  languages:
+  - python
+  severity: ERROR
+  metadata:
+    cwe:
+    - CWE-22
+- id: python-unrestricted-upload-cwe434
+  pattern-either:
+  - pattern: $FILE.save(os.path.join($DIR, $FILE.filename))
+  - pattern: open(os.path.join($DIR, $FILE.filename), 'w')
+  - pattern: open(f"{$DIR}/{$FILE.filename}", 'w')
+  message: 'Unrestricted Upload of File with Dangerous Type (CWE-434): Directly saving
+    files using the original client-provided filename without rigorous type or extension
+    validation can allow remote code execution.'
+  languages:
+  - python
+  severity: ERROR
+  metadata:
+    cwe:
+    - CWE-434
+- id: python-null-pointer-dereference-cwe476
+  pattern-either:
+  - pattern: '$X = None
+
+      ...
+
+      $X.$ATTR
+
+      '
+  - pattern: '$X = None
+
+      ...
+
+      $X.$METHOD(...)
+
+      '
+  message: 'Null Pointer Dereference risk (CWE-476): Accessing attributes or methods
+    on an object that could potentially be None leads to runtime exceptions or crashes.'
+  languages:
+  - python
+  severity: ERROR
+  metadata:
+    cwe:
+    - CWE-476
+- id: python-incorrect-authorization-cwe863
+  pattern-either:
+  - pattern: "if $USER.is_authenticated:\n    allow_access(...)\n"
+  - pattern: "@app.route(...)\n@login_required\ndef $FUNC(...):\n    ...\n"
+  message: 'Incorrect Authorization risk (CWE-863): Insufficient authorization validation
+    or flawed decorator combination on sensitive route.'
+  languages:
+  - python
+  severity: ERROR
+  metadata:
+    cwe:
+    - CWE-863
+- id: python-improper-input-validation-cwe20
+  pattern-either:
+  - pattern: re.match(...)
+  - pattern: re.search(...)
+  - pattern: '$QTY = int(...)
+
+      ...
+
+      $TOTAL = $PRICE * $QTY
+
+      '
+  message: 'Improper Input Validation risk (CWE-20): Unanchored regex search or unvalidated
+    numeric boundaries.'
+  languages:
+  - python
+  severity: ERROR
+  metadata:
+    cwe:
+    - CWE-20
+- id: python-improper-access-control-cwe284
+  # 原本含 $DB.query(...) 與 $DB.execute(...) 兩個裸 sink。
+  # 它們匹配「任何資料庫呼叫」，不帶任何存取控制語意，
+  # 實測在 150 筆 clean 樣本上產生 46 個誤報；且 CWE-284 屬 B 類，
+  # 走 semgrep_only 直接列報告，完全沒有模型過濾，全數呈現給使用者。
+  # 移除後僅保留真正表達「未受保護的管理端點」的 pattern。
+  pattern-either:
+  - pattern: "@app.route('/api/v1/admin/...')\ndef $FUNC(...):\n    ...\n"
+  message: 'Improper Access Control risk (CWE-284): Unprotected sensitive endpoints
+    or IDOR pattern detected.'
+  languages:
+  - python
+  severity: ERROR
+  metadata:
+    cwe:
+    - CWE-284
+- id: python-missing-authentication-cwe306
+  pattern-either:
+  - pattern: "@app.route('/api/bank/transfer', ...)\ndef $FUNC(...):\n    ...\n"
+  - pattern: "@app.route('/user/reset-password', ...)\ndef $FUNC(...):\n    ...\n"
+  message: 'Missing Authentication for Critical Function (CWE-306): Sensitive business
+    logic routes such as funds transfer or password reset must be wrapped with an
+    authentication guard decorator (e.g., @login_required).'
+  languages:
+  - python
+  severity: ERROR
+  metadata:
+    cwe:
+    - CWE-306
+- id: python-ssrf-cwe918
+  pattern-either:
+  - pattern: requests.get($URL, ...)
+  - pattern: requests.post($URL, ...)
+  - pattern: urllib.request.urlopen($URL, ...)
+  message: 'Server-Side Request Forgery risk (CWE-918): User-controlled URLs are passed
+    directly into network client functions without validation, potentially allowing
+    attackers to scan internal infrastructure or access cloud metadata services.'
+  languages:
+  - python
+  severity: ERROR
+  metadata:
+    cwe:
+    - CWE-918
+- id: python-command-neutralization-cwe77
+  pattern-either:
+  - pattern: os.system(...)
+  - pattern: subprocess.Popen(..., shell=True)
+  message: 'Improper Neutralization of Special Elements used in a Command (CWE-77):
+    Constructing system commands dynamically leads to arbitrary code execution.'
+  languages:
+  - python
+  severity: ERROR
+  metadata:
+    cwe:
+    - CWE-77
+- id: python-bypass-authorization-cwe639
+  pattern-either:
+  - pattern: '$ACCOUNT = $DB.find_by_id(..., request.args.get(...), ...)
+
+      '
+  - pattern: '$DB.execute("... WHERE user_id = " + request.form[...])
+
+      '
+  message: 'Authorization Bypass Through User-Controlled Key (CWE-639): Direct object
+    reference (IDOR) pattern detected where a user-controlled parameter specifies
+    the target database key directly without session ownership verification.'
+  languages:
+  - python
+  severity: ERROR
+  metadata:
+    cwe:
+    - CWE-639
+- id: python-unlimited-resource-allocation-cwe770
+  pattern-either:
+  - pattern: $FILE.read()
+  - pattern: ZipFile(...).extractall(...)
+  message: 'Allocation of Resources Without Limits or Throttling (CWE-770): Reading
+    files or extracting archives without restricting size constraints can result in
+    memory exhaustion (OOM) or disk denial of service via Zip Bombs.'
+  languages:
+  - python
+  severity: ERROR
+  metadata:
+    cwe:
+    - CWE-770
+- id: python-improper-authentication-cwe287
+  pattern-either:
+  - pattern: '$INPUT == "SuperSecretPythonPassword2026!"
+
+      '
+  - pattern: '$ALG == "none"
+
+      '
+  - pattern: 'hashlib.md5(...)
+
+      '
+  message: 'Improper Authentication (CWE-287): Flawed authentication mechanism detected
+    in Python. Avoid using standard equality (==) for sensitive password string comparisons
+    to mitigate timing attacks; use secrets.compare_digest() instead. Never accept
+    ''none'' algorithm for JWT, and deprecate weak hashing algorithms like MD5 for
+    password verification.'
+  languages:
+  - python
+  severity: ERROR
+  metadata:
+    cwe:
+    - CWE-287
+- id: python-improper-privilege-management-cwe269
+  pattern-either:
+  - pattern: '$USER.role = request.json["role"]
+
+      '
+  - pattern: '$USER.is_admin = request.json["is_admin"]
+
+      '
+  - pattern: 'os.setuid($UID)
+
+      ...
+
+      subprocess.Popen(...)
+
+      '
+  message: 'Improper Privilege Management (CWE-269): Uncontrolled assignment of privileges
+    or failure to properly handle privilege-dropping operations detected. Never trust
+    user-supplied input to directly modify object roles, and always wrap os.setuid()
+    inside try-except blocks to prevent privilege persistence upon failure.'
+  languages:
+  - python
+  severity: ERROR
+  metadata:
+    cwe:
+    - CWE-269
+- id: python-hardcoded-credentials-cwe798
+  pattern-either:
+  - pattern: '"SuperSecretPythonPassword2026!"
+
+      '
+  - pattern: '"amzn.aws.access_key_id.AKIAIOSFODNN7EXAMPLE"
+
+      '
+  - pattern: '{ ..., "password": "...", ... }
+
+      '
+  - pattern: '{ ..., "secret": "...", ... }
+
+      '
+  - pattern: '$OBJ.connect("...password=...", ...)
+
+      '
+  message: 'Use of Hard-coded Credentials (CWE-798): Hard-coded password, API key,
+    or token detected in Python source code. Store credentials securely using environment
+    variables (os.environ) or a secure secret management service (like AWS Secrets
+    Manager).'
+  languages:
+  - python
+  severity: ERROR
+  metadata:
+    cwe:
+    - CWE-798
+- id: python-integer-overflow-cwe190
+  pattern-either:
+  - pattern: 'np.int32($A * $B)
+
+      '
+  - pattern: 'np.int32($A + $B)
+
+      '
+  - pattern: '$TOTAL = $COUNT * $SIZE
+
+      ...
+
+      np.zeros($TOTAL)
+
+      '
+  message: 'Integer Overflow or Wraparound (CWE-119/CWE-190): Unsafe arithmetic operation
+    detected affecting native C-extensions like NumPy. Native data types (such as
+    int32) have fixed bit widths and will wrap around quietly when limits are exceeded,
+    leading to corrupted array dimensions or logic bypasses.'
+  languages:
+  - python
+  severity: ERROR
+  metadata:
+    cwe:
+    - CWE-190
+- id: python-resource-consumption-cwe400
+  pattern-either:
+  - pattern: '$RAW_DATA * int(request.form[...])
+
+      '
+  - pattern: '$RAW_DATA * int(request.json[...])
+
+      '
+  - pattern: 'request.files[...].read()
+
+      '
+  - pattern: 're.compile(".*(\+)+.*")
+
+      '
+  - pattern: 're.compile(".*(\*)*.*")
+
+      '
+  message: 'Uncontrolled Resource Consumption (CWE-400): Unbounded resource allocation
+    or CPU-intensive pattern matching detected in Python. Restrict input multiplier
+    boundaries, always provide a maximum byte size limit to read() operations, and
+    avoid nested quantifiers in regular expressions to prevent Denial of Service (DoS).'
+  languages:
+  - python
+  severity: ERROR
+  metadata:
+    cwe:
+    - CWE-400
+- id: python-hidden-functionality-cwe912
+  pattern-either:
+  - pattern: 'if user_input == "admin_secret_pass":
+
+      '
+  - pattern: 'eval(request.form["hidden_cmd"])
+
+      '
+  - pattern: 'if os.environ.get("BACKDOOR_KEY") == secret_key:
+
+      '
+  message: 'Hidden Functionality / Backdoor (CWE-912): Detected suspicious hidden
+    control paths, magic string checks, or backdoor command execution triggers. Remove
+    unintended code or document all operational entry points thoroughly.'
+  languages:
+  - python
+  severity: ERROR
+  metadata:
+    cwe:
+    - CWE-912
+- id: python-untrusted-inclusion-cwe829
+  pattern-either:
+  - pattern: 'exec(requests.get($URL).text)
+
+      '
+  - pattern: '"--extra-index-url", "http://"
+
+      '
+  - pattern: 'importlib.import_module(request.form["module_name"])
+
+      '
+  message: 'Inclusion of Functionality from Untrusted Control Sphere (CWE-829): Code
+    dynamically imports, downloads, or configures software execution from untrusted
+    sources or unencrypted channels. Verify the integrity of external components,
+    use HTTPS for package indices, and enforce an allowlist for dynamic imports.'
+  languages:
+  - python
+  severity: ERROR
+  metadata:
+    cwe:
+    - CWE-829
+- id: python-prototype-pollution-cwe1321
+  pattern-either:
+  - pattern: 'setattr($OBJ, request.json["key"], request.json["value"])
+
+      '
+  - pattern: '$OBJ.__init__.__globals__[$KEY] = $VAL
+
+      '
+  - pattern: 'if "__class__" in request.form:
+
+      '
+  message: 'Improper Control of Generation of Prototype Nodes (''Prototype Pollution'')
+    (CWE-1321): Unsafe dynamic attribute assignment or dictionary manipulation allows
+    attackers to pollute class templates, global namespaces, or magic attributes (e.g.,
+    __class__, __globals__). Sanitize and block special dunder keys before expanding
+    object structures.'
+  languages:
+  - python
+  severity: ERROR
+  metadata:
+    cwe:
+    - CWE-1321

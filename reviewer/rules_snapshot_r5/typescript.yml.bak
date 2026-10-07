@@ -1,0 +1,930 @@
+rules:
+  - id: ts-xss-cross-site-scripting-cwe79
+    pattern-either:
+      # Pattern 1: 直接指派給 innerHTML 或 outerHTML
+      - pattern: $EL.innerHTML = $INPUT
+      - pattern: $EL.outerHTML = $INPUT
+
+      # Pattern 2: 呼叫 document 原生寫入方法
+      - pattern: document.write($INPUT)
+      - pattern: document.writeln($INPUT)
+
+      # Pattern 3: 呼叫 eval 執行動態程式碼
+      - pattern: eval($INPUT)
+
+      # Pattern 4: 變更瀏覽器網址進行 javascript: 偽協定注入
+      - pattern: location.href = $INPUT
+      - pattern: window.location = $INPUT
+
+      # Pattern 5: 抓取任何物件字面量中包含 dangerouslySetInnerHTML 的結構
+      - pattern: "{ ..., dangerouslySetInnerHTML: $VAL, ... }"
+      # 如果你在 TSX/JSX 標籤內使用，則可以用這行（選用）：
+      # - pattern: <$TAG dangerouslySetInnerHTML={$VAL} />
+
+      # Pattern 6: 後端 Express 響應直接串接輸出（使用 ... 允許任何形式的拼接與變數）
+      - pattern: $RES.send(...)
+      - pattern: $RES.write(...)
+
+    message: "Cross-Site Scripting (XSS) (CWE-79): Untrusted input is rendered directly to the web page or output stream without proper escaping or sanitization. Use DOMPurify, secure modern framework binding, or robust encoding libraries."
+    languages: [typescript]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-79']
+
+  - id: ts-sqli-sql-injection-cwe89
+    pattern-either:
+      # Pattern 1: pg (PostgreSQL) 模組直接執行拼接或樣板字串
+      - pattern: $CLIENT.query($X + $INPUT, ...)
+      - pattern: $CLIENT.query(`...${$INPUT}...`, ...)
+
+      # Pattern 2: mysql2 模組直接執行拼接或樣板字串
+      - pattern: $CONN.query($X + $INPUT, ...)
+      - pattern: $CONN.query(`...${$INPUT}...`, ...)
+      - pattern: $CONN.execute($X + $INPUT, ...)
+      - pattern: $CONN.execute(`...${$INPUT}...`, ...)
+
+      # Pattern 3: TypeORM 框架中使用危險的 Raw SQL 方法（如 query 或 whereRaw 拼接）
+      - pattern: $REPO.query($X + $INPUT)
+      - pattern: $REPO.query(`...${$INPUT}...`)
+      - pattern: $QB.where($X + $INPUT)
+      - pattern: $QB.where(`...${$INPUT}...`)
+
+      # Pattern 4: Prisma 框架中使用不安全的 $queryRawUnsafe
+      - pattern: $PRISMA.$queryRawUnsafe($X + $INPUT)
+      - pattern: $PRISMA.$queryRawUnsafe(`...${$INPUT}...`)
+
+      # Pattern 5: Sequelize 框架中直接傳入拼接字串給 query 方法
+      - pattern: |
+          $SEQ.query($X + $INPUT, {
+            type: ...
+          })
+      - pattern: |
+          $SEQ.query(`...${$INPUT}...`, {
+            type: ...
+          })
+
+    message: "SQL Injection (CWE-89): Untrusted input is dynamically concatenated into a SQL query string. Use parameterized queries, prepared statements, or safe ORM mechanisms instead."
+    languages: [typescript]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-89']
+
+  - id: ts-csrf-cross-site-request-forgery-cwe352
+    pattern-either:
+      # Pattern 1: 偵測呼叫了 cookieParser 的 Express 初始化（移除多行層次，改用單行強匹配防崩潰）
+      - pattern: "$APP.use(cookieParser(...))"
+
+      # Pattern 2: Cookie 設定中將 sameSite 設為 "none"（用引號包覆防 AST 解析出錯）
+      - pattern: "res.cookie($NAME, $VAL, { ..., sameSite: 'none', ... })"
+      - pattern: "res.cookie($NAME, $VAL, { ..., sameSite: 'none', secure: false, ... })"
+
+      # Pattern 3: Express-session 配置中將 cookie.sameSite 設為 false 或 none
+      - pattern: "session({ ..., cookie: { ..., sameSite: false, ... }, ... })"
+      - pattern: "session({ ..., cookie: { ..., sameSite: 'none', ... }, ... })"
+
+      # Pattern 4: 停用了特定安全性套件中的 CSRF 保護，或設定寬鬆的忽略方法
+      - pattern: $PROTECT.disableCsrf()
+      - pattern: "csrf({ ..., ignoreMethods: $METHODS, ... })"
+
+    message: "Cross-Site Request Forgery (CSRF) (CWE-352): The application configuration lacks CSRF protection mechanisms or explicitly downgrades Cookie SameSite attributes, allowing unauthorized commands to be transmitted from trusted users. Ensure proper CSRF tokens or SameSite=Strict/Lax configurations are enforced."
+    languages: [typescript]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-352']
+
+  - id: ts-missing-authorization-cwe862
+    pattern-either:
+      # Pattern 1: NestJS 控制器中定義了敏感端點（如 @Delete, @Post, @Put），卻完全漏掉權限守衛（如 @UseGuards, @Roles）
+      - pattern: |
+          @Controller(...)
+          class $CLASS {
+            ...
+            @Delete(...)
+            $METHOD(...) { ... }
+          }
+      - pattern: |
+          @Controller(...)
+          class $CLASS {
+            ...
+            @Put(...)
+            $METHOD(...) { ... }
+          }
+
+      # Pattern 2: 路由方法中直接調用資料庫敏感操作，卻未在其前置鏈上或內部呼叫任何授權檢查方法
+      - pattern: |
+          $APP.delete($ROUTE, (req, res) => {
+            ...
+            $DB.deleteRecord(...);
+            ...
+          })
+
+      # Pattern 3: 在 GraphQL 的 Mutation 解析器（Resolver）方法中，完全沒有加入任何權限裝飾器
+      - pattern: |
+          @Resolver(...)
+          class $RESOLVER {
+            ...
+            @Mutation(...)
+            $MUTATION(...) { ... }
+          }
+
+      # Pattern 4: 自訂的敏感業務逻辑方法（例如管理員功能）名稱包含敏感字眼，卻完全缺乏授權驗證常規調用
+      - pattern: |
+          function executeAdminAction(...) {
+            ...
+            // 缺乏 checkPermission() 或 checkRole() 等呼叫
+            ...
+          }
+
+    message: "Missing Authorization (CWE-862): The application endpoint or sensitive business logic executes critical operations without checking the user's roles or permissions. Ensure proper Guards, Middleware, or authorization checks are explicitly added."
+    languages: [typescript]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-862']
+
+  - id: ts-out-of-bounds-write-cwe787
+    pattern-either:
+      # Pattern 1: Buffer 寫入時，寫入的偏移量（Offset）直接受外部輸入影響，無邊界檢查
+      - pattern: "$BUF.writeUInt8($VAL, $INPUT)"
+      - pattern: "$BUF.write($STR, $INPUT, ...)"
+
+      # Pattern 2: Buffer 複製時，目標起始偏移量、來源起始偏移量或複製長度直接受外部不受信任的輸入控制
+      - pattern: "$SRC.copy($TARGET, $INPUT, ...)"
+      - pattern: "$SRC.copy($TARGET, $OFFSET, $INPUT, ...)"
+
+      # Pattern 3: 操作原生快取陣列（如 Int32Array, Float64Array）時，索引值直接使用外部變數且缺乏校驗
+      - pattern: "$TYPED_ARRAY[$INPUT] = $VAL"
+
+      # Pattern 4: 手動向 WebAssembly 導出的記憶體緩衝區（DataView）進行不安全寫入
+      - pattern: "$VIEW.setUint32($INPUT, $VAL, ...)"
+      - pattern: "$VIEW.setFloat64($INPUT, $VAL, ...)"
+
+    message: "Out-of-bounds Write (CWE-787): The application writes data past the end, or before the beginning, of the intended buffer. In TypeScript, this manifests when manually managing byte offsets in Node.js Buffers, TypedArrays, or WebAssembly Shared Memory. Ensure all offset arguments and indices are strictly validated against buffer.length before writing."
+    languages: [typescript]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-787']
+
+  - id: ts-path-traversal-cwe22
+    pattern-either:
+      # Pattern 1: fs 模組原生同步/非同步檔案讀取，直接使用字串拼接或樣板字串
+      - pattern: $FS.readFile($X + $INPUT, ...)
+      - pattern: $FS.readFile(`...${$INPUT}...`, ...)
+      - pattern: $FS.readFileSync($X + $INPUT, ...)
+      - pattern: $FS.readFileSync(`...${$INPUT}...`, ...)
+
+      # Pattern 2: fs 模組檔案寫入/串流創建，其路徑直接受外部拼接控制
+      - pattern: $FS.writeFile($X + $INPUT, ...)
+      - pattern: $FS.writeFileSync($X + $INPUT, ...)
+      - pattern: $FS.createReadStream($X + $INPUT, ...)
+      - pattern: $FS.createWriteStream($X + $INPUT, ...)
+
+      # Pattern 3: fs/promises 模組的非同步檔案讀寫操作拼接
+      - pattern: $FSP.readFile($X + $INPUT, ...)
+      - pattern: $FSP.writeFile($X + $INPUT, ...)
+
+      # Pattern 4: path.join 或 path.resolve 僅做單純拼接，若無後續邊界檢查，依然屬於高風險 Path Traversal 特徵
+      - pattern: path.join($DIR, $INPUT)
+      - pattern: path.resolve($DIR, $INPUT)
+
+    message: "Path Traversal (CWE-22): Untrusted input is dynamically concatenated into a file system path. This allows attackers to bypass intended access controls and read/write arbitrary files via relative path sequences (e.g., '../../'). Use path.basename(), sanizitation libraries, or strictly validate that the resolved path resides within the intended base directory."
+    languages: [typescript]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-22']
+
+  - id: ts-use-after-free-cwe416
+    pattern-either:
+      # Pattern 1: 檔案描述符或系統 Stream 關閉/銷毀後，在後續程式碼中仍嘗試進行讀寫操作
+      - pattern: |
+          $STREAM.close(...);
+          ...
+          $STREAM.write(...);
+      - pattern: |
+          $STREAM.destroy(...);
+          ...
+          $STREAM.read(...);
+
+      # Pattern 2: WebSocket 或 Socket 連線關閉/結束後，未清理引用便繼續發送資料
+      - pattern: |
+          $SOCKET.end(...);
+          ...
+          $SOCKET.write(...);
+
+      # Pattern 3: 調用自訂或第三方 N-API/WASM 的記憶體釋放函數後，仍嘗試調用其操作方法
+      - pattern: |
+          $WASM_RESOURCE.free();
+          ...
+          $WASM_RESOURCE.$METHOD(...);
+      - pattern: |
+          $NATIVE_OBJ.destroy();
+          ...
+          $NATIVE_OBJ.update(...);
+
+    message: "Use After Free (CWE-416): The application attempts to use a resource (such as a closed file descriptor, a destroyed stream, a closed socket, or a deallocated WebAssembly memory pointer) after it has been explicitly released. Ensure that all data access is guarded by state checks or that references are set to null immediately after release."
+    languages: [typescript]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-416']
+
+  - id: ts-out-of-bounds-read-cwe125
+    pattern-either:
+      # Pattern 1: Buffer 讀取整數/浮點數時，偏移量直接受外部輸入影響，缺乏長度驗證
+      - pattern: "$BUF.readUInt8($INPUT)"
+      - pattern: "$BUF.readInt32LE($INPUT)"
+      - pattern: "$BUF.readFloatBE($INPUT)"
+
+      # Pattern 2: 使用 DataView 讀取底層 ArrayBuffer，且讀取的 byteOffset 受控
+      - pattern: "$VIEW.getUint8($INPUT)"
+      - pattern: "$VIEW.getInt32($INPUT, ...)"
+      - pattern: "$VIEW.getFloat64($INPUT, ...)"
+
+      # Pattern 3: 操作強型別快取陣列（如 Uint8Array）時，索引值直接使用外部變數且缺乏校驗
+      - pattern: |
+          $VAL = $TYPED_ARRAY[$INPUT];
+      - pattern: |
+          return $TYPED_ARRAY[$INPUT];
+
+    message: "Out-of-bounds Read (CWE-125): The application allows user-controlled inputs to dictate memory offsets or indices when reading from a Node.js Buffer, DataView, or TypedArray. This can cause the application to crash via a RangeError (DoS) or unintentionally leak adjacent binary memory fragments. Always strictly validate that 'input < buffer.length' before reading."
+    languages: [typescript]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-125']
+
+  - id: ts-command-injection-cwe78
+    pattern-either:
+      # Pattern 1 & 2: 使用命名空間或直接解構呼叫 exec / execSync (包含字串拼接與樣板字串)
+      - pattern: "child_process.exec($X + $INPUT, ...)"
+      - pattern: "child_process.exec(`...${$INPUT}...`, ...)"
+      - pattern: "exec($X + $INPUT, ...)"
+      - pattern: "exec(`...${$INPUT}...`, ...)"
+      
+      - pattern: "child_process.execSync($X + $INPUT, ...)"
+      - pattern: "child_process.execSync(`...${$INPUT}...`, ...)"
+      - pattern: "execSync($X + $INPUT, ...)"
+      - pattern: "execSync(`...${$INPUT}...`, ...)"
+
+      # Pattern 3: util.promisify(exec) 轉換後的任意非同步變數執行
+      - pattern: "$EXEC_PROM($X + $INPUT, ...)"
+      - pattern: "$EXEC_PROM(`...${$INPUT}...`, ...)"
+
+      # Pattern 4: spawn / spawnSync 開啟危險的 shell: true 選項（用完整字串包裹，徹底修復 AST 崩潰問題）
+      - pattern: "child_process.spawn($X + $INPUT, ..., { ..., shell: true, ... })"
+      - pattern: "child_process.spawn(`...${$INPUT}...`, ..., { ..., shell: true, ... })"
+      - pattern: "spawn($X + $INPUT, ..., { ..., shell: true, ... })"
+      - pattern: "spawn(`...${$INPUT}...`, ..., { ..., shell: true, ... })"
+
+    message: "OS Command Injection (CWE-78): Untrusted input is dynamically concatenated into an OS command execution function. This allows attackers to execute arbitrary shell commands with the privileges of the Node.js process. Avoid using exec/shell:true with concatenation; instead, use child_process.spawn or child_process.execFile with arguments passed as an array of strings."
+    languages: [typescript]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-78']
+
+  - id: ts-code-injection-cwe94
+    pattern-either:
+      # Pattern 1: 全局 eval 函數內含不安全的字串拼接或樣板字串
+      - pattern: eval($X + $INPUT)
+      - pattern: eval(`...${$INPUT}...`)
+
+      # Pattern 2: 使用 new Function 或是 Function 構造器動態生成程式碼，且內含外部輸入
+      - pattern: new Function($X + $INPUT, ...)
+      - pattern: new Function(..., $X + $INPUT)
+      - pattern: new Function(`...${$INPUT}...`, ...)
+      - pattern: new Function(..., `...${$INPUT}...`)
+      - pattern: Function($X + $INPUT, ...)
+      - pattern: Function(..., `...${$INPUT}...`)
+
+      # Pattern 3: Node.js 核心安全沙箱 'vm' 模組的不安全動態腳本執行
+      - pattern: $VM.runInContext($X + $INPUT, ...)
+      - pattern: $VM.runInContext(`...${$INPUT}...`, ...)
+      - pattern: $VM.runInNewContext($X + $INPUT, ...)
+      - pattern: $VM.runInNewContext(`...${$INPUT}...`, ...)
+      - pattern: $VM.runInThisContext($X + $INPUT, ...)
+      - pattern: $VM.runInThisContext(`...${$INPUT}...`, ...)
+
+      # Pattern 4: Node.js 'vm' 模組中，建立危險的 Script 對象時拼接了外部輸入
+      - pattern: new $VM.Script($X + $INPUT, ...)
+      - pattern: new $VM.Script(`...${$INPUT}...`, ...)
+
+    message: "Improper Control of Generation of Code / Code Injection (CWE-94): Passing untrusted input into eval(), new Function(), or the 'vm' module allows attackers to execute arbitrary JavaScript/TypeScript code within the process context. Never pass user-controlled strings to these code-generation functions. Use safe alternatives such as JSON.parse() or a strict whitelist."
+    languages: [typescript]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-94']
+
+  - id: ts-buffer-overflow-unchecked-copy-cwe120
+    pattern-either:
+      # Pattern 1: 不安全地使用 Buffer.copy() 進行區塊複製，且沒有在傳入前做長度檢查
+      - pattern: "$SRC.copy($TARGET, ...)"
+
+      # Pattern 2: 使用 TypedArray 的 .set() 批量寫入資料，直接丟入未經大小校驗的外部陣列或快取
+      - pattern: "$TYPED_ARRAY.set($INPUT, ...)"
+
+      # Pattern 3: 在固定大小的 Buffer 結構上呼叫 write()，且未指定或限制其寫入的長度上限（length 參數）
+      - pattern: "$BUF.write($INPUT)"
+      - pattern: "$BUF.write($INPUT, $OFFSET)"
+
+      # Pattern 4: 自訂的快取寫入/複製函數中，在執行資料複製前，缺乏任何對來源與目標大小的比對邏輯
+      - pattern: |
+          function copyBuffer($SRC, $DEST, ...) {
+            ...
+            // 缺失對長度的安全檢驗
+            ...
+          }
+
+    message: "Buffer Copy without Checking Size of Input (CWE-120): The application copies or writes an input buffer or array into a fixed-size target buffer (Node.js Buffer, TypedArray, or SharedArrayBuffer) without validating that the input size does not exceed the target allocation. This can trigger a runtime RangeError leading to Denial of Service (DoS) or cause native addon memory corruption. Always verify 'input.length <= target.length' before executing copies."
+    languages: [typescript]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-120']
+
+  - id: ts-unrestricted-file-upload-cwe434
+    pattern-either:
+      # Pattern 1: Multer 配置中直接將不安全的原始檔名 (file.originalname) 作為儲存檔名，無任何副檔名檢查
+      - pattern: "filename: (req, file, cb) => { ..., cb(null, file.originalname); }"
+      - pattern: "filename: function(req, file, cb) { ..., cb(null, file.originalname); }"
+
+      # Pattern 2: 在自訂的上傳路由或中間件中，直接拿 file.originalname 進行本地檔案寫入
+      - pattern: "$FS.writeFile(..., $PATH + $REQ.file.originalname, ...)"
+      - pattern: "$FS.writeFileSync(..., $PATH + $REQ.file.originalname, ...)"
+      - pattern: "$FS.createWriteStream(..., $PATH + $REQ.file.originalname, ...)"
+
+      # Pattern 3: NestJS 的 FileInterceptor 或 UploadedFile 的處理邏輯中，直接使用原始檔名進行儲存，缺乏副檔名白名單驗證
+      - pattern: |
+          @Post(...)
+          @UseInterceptors(FileInterceptor(...))
+          $METHOD(@UploadedFile() $FILE, ...) {
+            ...
+            $FS.writeFileSync(..., $FILE.originalname);
+            ...
+          }
+
+    message: "Unrestricted Upload of File with Dangerous Type (CWE-434): The application allows users to upload files and retains their original extensions or names without strict server-side validation against a whitelist. This could enable an attacker to upload dangerous scripts (e.g., .js, .ts, .html) and execute them on the server or via clients' browsers. Always generate randomized file names, use standard mime-type checking, and validate file extensions strictly on the server side."
+    languages: [typescript]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-434']
+
+  - id: ts-null-pointer-dereference-cwe476
+    pattern-either:
+      # Pattern 1: 使用 TypeScript 的非空斷言操作符（Non-null Assertion Operator !.）
+      # 這等同於強行告訴編譯器「這絕對不是 null」，若運行時不幸為 null 就會引發崩潰
+      - pattern: "$X!. $PROP"
+      - pattern: "$X!. $METHOD(...)"
+
+      # Pattern 2: 呼叫 Array.prototype.find() 後，在未檢查傳回值是否為 undefined 的情況下，直接連續存取屬性
+      - pattern: "$ARR.find(...).$PROP"
+      - pattern: "$ARR.find(...).$METHOD(...)"
+
+      # Pattern 3: 對 Map.prototype.get() 的傳回值直接進行屬性解參照，而未校驗 key 是否真的存在
+      - pattern: "$MAP.get(...).$PROP"
+      - pattern: "$MAP.get(...).$METHOD(...)"
+
+      # Pattern 4: 自訂函數的回傳型別明確包含 null/undefined，但在呼叫該函數後直接串接屬性
+      - pattern: |
+          function $FN(...): $TYPE | null { ... }
+          ...
+          $FN(...).$PROP
+      - pattern: |
+          function $FN(...): $TYPE | undefined { ... }
+          ...
+          $FN(...).$PROP
+
+    message: "Null Pointer Dereference (CWE-476): The application attempts to dereference an object that can be null or undefined. Overusing the non-null assertion operator (!.) or bypassing checks on Array.find() / Map.get() outputs can lead to runtime TypeErrors and application crashes. Use optional chaining (?.) or explicit conditional checks instead."
+    languages: [typescript]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-476']
+
+  - id: ts-stack-buffer-overflow-semantic-cwe121
+    pattern-either:
+      # Pattern 1: 在函式局部範疇中建立固定極小長度的 Buffer，並直接將未經長度校驗的外部輸入寫入
+      - pattern: |
+          function $FN(...) {
+            ...
+            const $BUF = Buffer.alloc($SIZE);
+            ...
+            $BUF.write($INPUT, ...);
+            ...
+          }
+
+      # Pattern 2: 在局部範疇建立固定大小的 TypedArray，並直接使用 .set() 塞入未經檢查的外部資料
+      - pattern: |
+          function $FN(...) {
+            ...
+            const $TA = new Uint8Array($SIZE);
+            ...
+            $TA.set($INPUT, ...);
+            ...
+          }
+
+      # Pattern 3: 函式內部存在自我遞迴呼叫（解構未知深度的外部輸入），且缺乏最大深度（Max Depth）的計數防禦器
+      - pattern: |
+          function $RECURSIVE($NODE, ...) {
+            ...
+            $RECURSIVE($NODE.$PROP, ...);
+            ...
+          }
+
+    message: "Stack-based Buffer Overflow [Logical Mapping] (CWE-121): The application either allocates a fixed-size buffer in a local function scope and writes unvalidated inputs into it (causing a runtime RangeError), or performs unbounded deep recursion over untrusted nested data structures (causing a Maximum Call Stack Size Exceeded crash). Ensure local buffer writes are size-checked and recursive functions implement a maximum depth limit."
+    languages: [typescript]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-121']
+
+  - id: ts-untrusted-deserialization-cwe502
+    pattern-either:
+      # Pattern 1: 使用不安全的 node-serialize 套件還原物件（支援函式還原與 IIFE 執行）
+      - pattern: "nodeSerialize.unserialize($INPUT, ...)"
+      - pattern: "unserialize($INPUT, ...)"
+
+      # Pattern 2: 使用 js-yaml 進行高風險的 YAML 全功能還原
+      - pattern: "yaml.load($INPUT, ...)"
+      - pattern: "yaml.unsafeLoad($INPUT, ...)"
+      - pattern: "load($INPUT, ...)"
+
+      # Pattern 3: 使用 eval() 拼接括號來動態還原物件圖形（修正了前一版的引號閉合與語法衝突問題）
+      - pattern: "eval('(' + $INPUT + ')')"
+      - pattern: "eval(`(${$INPUT})`)"
+
+    message: "Deserialization of Untrusted Data (CWE-502): Passing untrusted input to an unsafe deserialization function (like node-serialize.unserialize or unsafe YAML loaders) allows attackers to inject malicious objects and achieve Remote Code Execution (RCE). Use secure alternatives like JSON.parse() or configure strict, data-only schemas."
+    languages: [typescript]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-502']
+
+  - id: ts-heap-buffer-overflow-semantic-cwe122
+    pattern-either:
+      # Pattern 1: 使用不安全的 allocUnsafe 於堆積分配空間，且後續的寫入操作限制長度（Length）或偏移量受外部非信任數據控制，導致未初始化記憶體外洩或邏輯溢位
+      - pattern: "Buffer.allocUnsafe($SIZE)"
+      - pattern: "Buffer.allocUnsafeSlow($SIZE)"
+
+      # Pattern 2: 在手動維護的堆積物件池（Heap Object Pool）或陣列快取中，使用受控的索引進行賦值，缺乏長度與邊界檢查
+      - pattern: "$POOL.set($INDEX, $OBJ)"
+      - pattern: "$POOL_ARRAY[$INDEX] = $OBJ"
+
+    message: "Heap-based Buffer Overflow [Semantic Mapping] (CWE-122): The application either allocates uninitialized memory blocks on the heap using Buffer.allocUnsafe() without fully clearing/overwriting the residual bytes (risking data leakage or out-of-bounds corruption), or manipulates a custom heap object pool using unvalidated indices. Always prefer Buffer.alloc() for safe heap allocation, and ensure all pool array assignments are bound-checked."
+    languages: [typescript]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-122']
+
+  - id: ts-incorrect-authorization-cwe863
+    pattern-either:
+      # Pattern 1: 資料庫查詢/更新時，直接將前端傳入的 ID 當作唯一條件，完全沒有與當前 Session 或 JWT 的 user.id 進行比對
+      - pattern: "$MODEL.findOne({ id: $REQ.params.id })"
+      - pattern: "$MODEL.updateOne({ id: $REQ.params.id }, ...)"
+      - pattern: "$MODEL.findByIdAndUpdate($REQ.body.id, ...)"
+
+      # Pattern 2: 在自訂邏輯中，將物件擁有的所有者 ID 直接與前端傳入的參數做操作，而缺乏與當前登入者身分的校驗
+      - pattern: |
+          const $DATA = await $MODEL.findOne(...);
+          ...
+          // 漏洞特徵：直接執行敏感操作，中途完全沒有檢查 $DATA.ownerId === $REQ.user.id
+          await $MODEL.deleteOne(...);
+
+      # Pattern 3: 在 NestJS 等架構中，控制器方法包含管理員或敏感操作（如 delete/update），卻沒有掛載任何 @UseGuards() 或 @Roles() 權限防禦裝飾器
+      - pattern: |
+          @Delete(...)
+          $METHOD(...) {
+            ...
+          }
+
+    message: "Incorrect Authorization (CWE-863): The application performs an authorization check, but it does not correctly ensure that the logged-in user possesses the required privileges or ownership to access the requested resource. This often leads to Insecure Direct Object Reference (IDOR) vulnerabilities. Always validate that 'resource.ownerId === req.user.id' or enforce strict role-based access controls."
+    languages: [typescript]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-863']
+
+  - id: ts-improper-input-validation-cwe20
+    pattern-either:
+      # Pattern 1: 外部輸入未經驗證，直接賦值給變數並用於動態物件屬性查找（原型污染/黑箱操作隱患）
+      - pattern: |
+          $VAR = $REQ.body;
+          ...
+          $OBJ[$VAR]
+      - pattern: |
+          $VAR = $REQ.query;
+          ...
+          $OBJ[$VAR]
+
+      # Pattern 2: 使用外部輸入動態拼接建立不安全的正規表達式（用引號包裹，修正 Regex 引擎解析問題）
+      - pattern: "new RegExp($X + $INPUT)"
+      - pattern: "new RegExp(`...${$INPUT}...`)"
+      - pattern: "new RegExp($INPUT)"
+
+      # Pattern 3: 在 Express/Nest 中，直接將非信任的 query 或是 body 參數未加校驗直接丟入重定向
+      - pattern: "res.redirect($REQ.query.$PARAM)"
+      - pattern: "res.redirect($REQ.body.$PARAM)"
+
+    message: "Improper Input Validation (CWE-20): The application receives untrusted input and uses it without prior validation, or uses a flawed regex validation pattern that can be bypassed. This can lead to open redirection, Prototype Pollution, or parameter injection. Always validate inputs using schema libraries like Zod or ensure rigorous boundary/format constraints."
+    languages: [typescript]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-20']
+
+  - id: ts-improper-access-control-cwe284
+    pattern-either:
+      # Pattern 1: CORS 中間件配置過於寬鬆，將 Origin 設為 * 或允許任意網域
+      - pattern: "cors({ origin: '*' })"
+      - pattern: "cors({ origin: true })"
+      - pattern: "res.setHeader('Access-Control-Allow-Origin', '*')"
+
+      # Pattern 2: Express 路由配置中，敏感 API 端點（如包含 admin/config/delete）完全沒有掛載認證/授權檢查函式
+      - pattern: "app.get('/admin/...', $METHOD)"
+      - pattern: "router.post('/config/...', $METHOD)"
+
+      # Pattern 3: NestJS 控制器中，敏感的端點或整個 Class 上暴露，卻缺乏身分驗證 Guard 的攔截
+      - pattern: |
+          @Controller('admin')
+          class $CLASS {
+            ...
+          }
+
+    message: "Improper Access Control (CWE-284): The application fails to restrict access to sensitive resources or endpoints properly. Setting CORS origins to '*' or allowing wildcard API routes without authentication/authorization layers exposes internal services to unauthorized cross-origin or external access. Always enforce explicit Guard/Middleware chains and limit CORS scopes."
+    languages: [typescript]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-284']
+
+  - id: ts-sensitive-information-exposure-cwe200
+    pattern-either:
+      # Pattern 1: 在 catch 區塊中，直接將捕獲的錯誤堆疊 (error.stack) 或原始錯誤物件當作響應內文回傳給用戶
+      - pattern: "res.send($ERR.stack)"
+      - pattern: "res.json({ ..., error: $ERR, ... })"
+      - pattern: "res.status(...).send($ERR)"
+
+      # Pattern 2: 直接回傳包含敏感欄位名稱（如明示的 password, secret, token）的物件或全域變數
+      - pattern: "res.json({ ..., password: $PASS, ... })"
+      - pattern: "res.send({ ..., secret: $SEC, ... })"
+
+      # Pattern 3: 在自訂日誌（如 console.log/error）或外部傳輸中，直接將環境變數 (process.env) 完整傾印
+      - pattern: "console.log(process.env)"
+      - pattern: "res.send(process.env)"
+
+    message: "Exposure of Sensitive Information to an Unauthorized Actor (CWE-200): The application leaks sensitive data (such as raw error stacks, environment variables, or password fields) in HTTP responses or verbose logs. This information can assist attackers in mapping the internal infrastructure or bypassing access controls. Sanitize all output data and use explicit view models or validation schemas."
+    languages: [typescript]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-200']
+
+  - id: ts-missing-authentication-cwe306
+    pattern-either:
+      # Pattern 1: Express 路由中，關鍵敏感路徑（如 /checkout, /payment, /password）直接綁定回呼函式，完全沒有掛載任何認證中間件
+      - pattern: "app.post('/api/checkout', $METHOD)"
+      - pattern: "router.post('/user/change-password', $METHOD)"
+      - pattern: "app.put('/api/payment/...', $METHOD)"
+
+      # Pattern 2: NestJS 控制器中，涉及敏感功能的方法（如含有 password, payment, checkout 字樣），其上方完全沒有任何 @UseGuards() 裝飾器
+      - pattern: |
+          @Post($PATH)
+          $METHOD(...) {
+            ...
+            $X.changePassword(...);
+            ...
+          }
+      - pattern: |
+          @Post($PATH)
+          $METHOD(...) {
+            ...
+            $X.processPayment(...);
+            ...
+          }
+
+    message: "Missing Authentication for Critical Function (CWE-306): The application executes a critical function (such as changing passwords, processing payments, or checking out) without verifying the identity of the actor. Ensure that appropriate authentication middleware (e.g., passport.authenticate()) or NestJS AuthGuards are strictly enforced on these endpoints."
+    languages: [typescript]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-306']
+
+  - id: ts-ssrf-untrusted-request-cwe918
+    pattern-either:
+      # Pattern 1: 使用 axios 進行不安全的 URL 拼接，直接接受非信任輸入作為請求目標
+      - pattern: "axios.get($X + $INPUT, ...)"
+      - pattern: "axios.get(`...${$INPUT}...`, ...)"
+      - pattern: "axios.post($X + $INPUT, ...)"
+      - pattern: "axios.post(`...${$INPUT}...`, ...)"
+      - pattern: "axios($X + $INPUT, ...)"
+      - pattern: "axios(`...${$INPUT}...`, ...)"
+
+      # Pattern 2: 使用 axios.request 設定物件時，將 url 屬性直接指派為受控的拼接字串
+      - pattern: "axios.request({ ..., url: $X + $INPUT, ... })"
+      - pattern: "axios.request({ ..., url: `...${$INPUT}...`, ... })"
+
+      # Pattern 3: 使用 node-fetch 或原生 fetch 進行不安全的動態 URL 請求
+      - pattern: "fetch($X + $INPUT, ...)"
+      - pattern: "fetch(`...${$INPUT}...`, ...)"
+
+    message: "Server-Side Request Forgery (SSRF) (CWE-918): The application constructs a server-side HTTP request URL by concatenating untrusted user input directly. This allows external attackers to force the server to make unauthorized requests to internal resources, private networks, or cloud metadata endpoints (e.g., 169.254.169.254). Always validate inputs against a strict whitelist of allowed domains or use explicit URL parsing to restrict destinations."
+    languages: [typescript]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-918']
+
+  - id: ts-command-injection-child-process-cwe77
+    pattern-either:
+      # Pattern 1: 使用 child_process.exec 進行不安全的字串拼接命令執行
+      - pattern: "child_process.exec($X + $INPUT, ...)"
+      - pattern: "child_process.exec(`...${$INPUT}...`, ...)"
+      - pattern: "exec($X + $INPUT, ...)"
+      - pattern: "exec(`...${$INPUT}...`, ...)"
+
+      # Pattern 2: 使用 child_process.execSync 同步執行的不安全拼接特徵
+      - pattern: "child_process.execSync($X + $INPUT, ...)"
+      - pattern: "child_process.execSync(`...${$INPUT}...`, ...)"
+      - pattern: "execSync($X + $INPUT, ...)"
+      - pattern: "execSync(`...${$INPUT}...`, ...)"
+
+      # Pattern 3: 在 spawn 或 execFile 中，錯誤地將 shell 選項設為 true，並透過字串拼接引數，將引數提權為指令執行
+      - pattern: "child_process.spawn($CMD + $INPUT, ..., {..., shell: true, ...})"
+      - pattern: "child_process.spawn(`...${$INPUT}...`, ..., {..., shell: true, ...})"
+      - pattern: "spawn($CMD + $INPUT, ..., {..., shell: true, ...})"
+      - pattern: "spawn(`...${$INPUT}...`, ..., {..., shell: true, ...})"
+
+    message: "Improper Neutralization of Special Elements used in a Command ('Command Injection') (CWE-77): The application constructs an OS command by directly concatenating untrusted user input into child_process.exec or shell-enabled spawn functions. This allows malicious actors to execute arbitrary system commands with the privileges of the Node.js process. Always pass arguments as an array using safe APIs like child_process.execFile or child_process.spawn with shell: false."
+    languages: [typescript]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-77']
+
+  - id: ts-idor-user-controlled-key-cwe639
+    pattern-either:
+      # Pattern 1: 資料庫或資料層查詢時，直接將前端可控的 params/body 鍵值作為對象直接查詢，且過濾條件中完全缺乏當前 req.user 的身分綁定
+      - pattern: "$REPO.findOne({ where: { id: $REQ.params.$KEY } })"
+      - pattern: "$REPO.find({ accountNumber: $REQ.body.$KEY })"
+      - pattern: "$MODEL.findById($REQ.query.$KEY)"
+
+      # Pattern 2: 在敏感操作（如刪除、更新）時，直接拿用戶傳入的 Key 進行就地異動，未檢查該資源的權限歸屬
+      - pattern: "$MODEL.destroy({ where: { id: $REQ.params.$KEY } })"
+      - pattern: "$MODEL.findOneAndUpdate({ _id: $REQ.body.$KEY }, ...)"
+
+    message: "Authorization Bypass Through User-Controlled Key (CWE-639): The application uses an actor-controlled key to access a resource without verifying that the actor has permission to access that specific resource. This leads to Insecure Direct Object Reference (IDOR). Always chain the user identity identifier (e.g., req.user.id) to the query filter or perform explicit authorization mapping."
+    languages: [typescript]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-639']
+
+  - id: ts-uncontrolled-resource-allocation-cwe770
+    pattern-either:
+      # Pattern 1: 直接將前端非信任的參數直接傳入 Buffer 分配函數，極易導致 OOM 崩潰
+      - pattern: "Buffer.alloc($REQ.body.$PARAM)"
+      - pattern: "Buffer.alloc($REQ.query.$PARAM)"
+      - pattern: "new Array($REQ.body.$PARAM)"
+
+      # Pattern 2: 在高開銷的路由（如涉及 /login, /forgot-password, /upload）配置中，連續定義了處理器卻在整條鏈路或全域遺漏了速率限制中間件（Rate Limiter）
+      # 此特徵主要捕捉缺乏防護的高危險端點
+      - pattern: "app.post('/api/login', $METHOD)"
+      - pattern: "router.post('/api/sms/send', $METHOD)"
+
+      # Pattern 3: 動態創立大量的定時器（setTimeout / setInterval）且計時長度受外部參數完全控制
+      - pattern: "setTimeout($FN, $REQ.body.$PARAM)"
+      - pattern: "setInterval($FN, $REQ.query.$PARAM)"
+
+    message: "Allocation of Resources Without Limits or Throttling (CWE-770): The application allocates memory, limits timers, or exposes high-cost API endpoints without proper restriction or throttling. Attackers can leverage this to exhaust system memory (OOM) or flood services, leading to Denial of Service (DoS). Always enforce explicit maximum boundary checks on allocations and integrate rate-limiting middleware."
+    languages: [typescript]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-770']
+
+  - id: ts-improper-authentication-cwe287
+    pattern-either:
+      # Pattern 1: 在身份認證或金鑰核對邏輯中，錯誤使用非嚴格相等 (== 或 !=) 進行密碼/Token 比對，易遭弱型別繞過
+      - pattern: "if ($SECRET == $INPUT) { ... }"
+      - pattern: "if ($SECRET != $INPUT) { ... }"
+
+      # Pattern 2: 自訂認證中間件中，當捕獲到認證失敗或空值時，漏掉了 return 語句，導致後續的 next() 依然被執行，等同繞過認證
+      - pattern: |
+          if (!$REQ.headers.$AUTH) {
+            $RES.status(401);
+            next();
+          }
+      - pattern: |
+          if (!$REQ.headers.$AUTH) {
+            $RES.sendStatus(401);
+            next();
+          }
+
+      # Pattern 3: 在 JWT 驗證邏輯中，配置了不安全的選項（例如允許 'none' 演算法或完全不驗證簽章）
+      - pattern: "jwt.verify($TOKEN, $KEY, { algorithms: [..., 'none', ...] })"
+      - pattern: "jwt.decode($TOKEN)"
+
+    message: "Improper Authentication (CWE-287): The application fails to perform proper authentication before performing a restricted action. This can stem from weak type comparison during credentials check, missing early return statements in auth middleware leading to execution bypass, or using unsafe JWT configurations like decoding without verification or allowing the 'none' algorithm."
+    languages: [typescript]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-287']
+
+  - id: ts-improper-privilege-management-cwe269
+    pattern-either:
+      # Pattern 1: 系統底層權限切換時，直接傳入外部非信任輸入作為 UID 或 GID，導致任意提權漏洞
+      - pattern: "process.setuid($REQ.body.$PARAM)"
+      - pattern: "process.setuid($REQ.query.$PARAM)"
+      - pattern: "process.setgid($REQ.body.$PARAM)"
+
+      # Pattern 2: 批量賦值 (Mass Assignment) 漏洞：直接將前端 body 物件未經清洗直接指派給使用者的權限屬性，或直接寫入資料庫
+      - pattern: "Object.assign($USER, $REQ.body)"
+      - pattern: "$MODEL.update($REQ.body, ...)"
+      - pattern: "$MODEL.findByIdAndUpdate(..., $REQ.body, ...)"
+
+      # Pattern 3: 在自訂提權、裝飾器或邏輯中，將不安全的任意布林參數值直接用於設定 isAdmin 或 role 等核心特權欄位
+      - pattern: "$USER.isAdmin = $REQ.body.$PARAM"
+      - pattern: "$USER.role = $REQ.body.$PARAM"
+
+    message: "Improper Privilege Management (CWE-269): The application improperly manages privileges, allowing untrusted inputs to control system-level identities (setuid), causing Mass Assignment vulnerabilities where users can elevate their own roles (e.g., overriding 'role' or 'isAdmin'), or directly assigning unvalidated roles. Always strictly sanitize input data against a strict whitelist before object assignment or database entry."
+    languages: [typescript]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-269']
+
+  - id: ts-buffer-bounds-restriction-cwe119
+    pattern-either:
+      # Pattern 1: 在未初始化的不安全 Buffer 上執行寫入操作，且其偏移量或長度直接受外部非信任數據控制，缺乏邊界檢查
+      - pattern: "$BUF.write($INPUT, $OFFSET, $LENGTH, ...)"
+      - pattern: "$BUF.write($INPUT, $OFFSET, ...)"
+
+      # Pattern 2: 在 Buffer 複製操作 (copy) 中，目標起點、來源起點或複製長度直接套用外部參數
+      - pattern: "$SRC_BUF.copy($TARGET_BUF, $TARGET_START, $SRC_START, $SRC_END)"
+      - pattern: "$SRC_BUF.copy($TARGET_BUF, $TARGET_START, ...)"
+
+      # Pattern 3: 對記憶體緩衝區進行子檢視切片 (subarray) 時，偏移量參數直接受前端控制，可能導致邏輯邊界破壞或越界讀取
+      - pattern: "$BUF.subarray($START, $END)"
+      - pattern: "$BUF.slice($START, $END)"
+
+    message: "Improper Restriction of Operations within the Bounds of a Memory Buffer (CWE-119): The application performs operations on a Buffer instance where the offset, length, or slicing indices are driven by untrusted input. In Node.js/TypeScript, while this cannot cause a classic machine-level core dump, it can lead to Out-of-Bounds logical reads (leaking raw heap memory segments containing passwords/keys) or process crashes due to RangeError. Always enforce strict validation on offset and length parameters."
+    languages: [typescript]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-119']
+
+  - id: ts-hardcoded-credentials-cwe798
+    pattern-either:
+      # Pattern 1: 常見的密碼、金鑰、私鑰變數被直接賦值為非空的明文字串常值
+      - pattern: "const $PASS = \"...\";"
+      - pattern: "let $SECRET = \"...\";"
+      - pattern: "var $KEY = \"...\";"
+
+      # Pattern 2: 在初始化資料庫連接、金鑰配置或 JWT 驗證時，直接將參數欄位寫死為字串
+      - pattern: "jwt.verify($T, \"...\", ...)"
+      - pattern: "new DataSource({ ..., password: \"...\", ... })"
+      - pattern: "createConnection({ ..., password: \"...\", ... })"
+
+      # Pattern 3: 物件或字典型態的配置檔案中，將敏感認證欄位直接硬編碼
+      - pattern: "const $CONF = { ..., secret: \"...\", ... };"
+      - pattern: "const $CONF = { ..., password: \"...\", ... };"
+
+    message: "Use of Hard-coded Credentials (CWE-798): The application uses a hard-coded credential, such as a password, an encryption key, or an API secret. This makes it easy for attackers to compromise the system if they gain access to the source code. Always transfer credentials into external environment variables (process.env) or a secure secrets manager."
+    languages: [typescript]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-798']
+
+  - id: ts-integer-overflow-typedarray-cwe190
+    pattern-either:
+      # Pattern 1: 在處理固定位元組的 TypedArray（如 Uint8Array, Int32Array）時，將受前端控制的相加或相乘運算直接寫入，易造成二進位截斷溢位
+      - pattern: "new Uint8Array($REQ.body.$PARAM + $X)"
+      - pattern: "new Int32Array($REQ.query.$PARAM * $X)"
+      - pattern: "$TYPED_ARRAY[$INDEX] = $REQ.body.$PARAM + $X"
+
+      # Pattern 2: 在 Buffer 分配、寫入或複製的長度/偏移量計算中，直接對前端傳入的參數進行算術運算而未經安全整數邊界校驗
+      - pattern: "Buffer.alloc($REQ.body.$PARAM + $X)"
+      - pattern: "$BUF.write($STR, $REQ.query.$OFFSET + $X)"
+
+      # Pattern 3: 在大數計算、計費或迴圈邊界中，直接進行累加/累乘，且完全沒有校驗 Number.MAX_SAFE_INTEGER
+      - pattern: |
+          let $AMOUNT = $REQ.body.$PARAM;
+          ...
+          $AMOUNT += $X; // 缺乏邊界檢查的累加
+    message: "Integer Overflow or Wraparound (CWE-190): The application performs arithmetic operations on untrusted inputs before allocating memory buffers, slicing arrays, or assigning values to strict container types like TypedArrays (e.g., Uint8Array). While native TypeScript numbers are float64 and lose precision rather than wrap around, underlying TypedArrays and Buffer boundaries will suffer wrap-around truncation or cause logical bypasses. Always validate inputs against 'Number.MAX_SAFE_INTEGER' and enforce maximum boundary checks."
+    languages: [typescript]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-190']
+
+  - id: ts-uncontrolled-resource-consumption-cwe400
+    pattern-either:
+      # Pattern 1: ReDoS 漏洞 - 將前端不可信的輸入直接編譯為 RegExp 或直接用於正則匹配方法
+      - pattern: "new RegExp($REQ.query.$PARAM, ...)"
+      - pattern: "new RegExp($REQ.body.$PARAM, ...)"
+      - pattern: "$STR.match($REQ.body.$PARAM)"
+      - pattern: "$STR.search($REQ.query.$PARAM)"
+
+      # Pattern 2: 迴圈迭代次數完全受控於外部輸入，且缺乏上限檢查，易導致 CPU 資源耗盡 (DoS)
+      - pattern: |
+          for (let $I = 0; $I < $REQ.body.$PARAM; $I++) {
+            ...
+          }
+      - pattern: |
+          while ($X < $REQ.query.$PARAM) {
+            ...
+            $X++;
+          }
+
+    message: "Uncontrolled Resource Consumption (CWE-400): The application does not properly control the consumption of CPU or execution time. Compiling dynamic text into RegExp without sanitization leads to Regular Expression Denial of Service (ReDoS). Running loops directly bounded by client inputs without a maximum limit blocks the single-threaded event loop. Always validate and enforce strict maximum thresholds."
+    languages: [typescript]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-400']
+
+  - id: ts-hidden-functionality-backdoor-cwe912
+    pattern-either:
+      # Pattern 1: 利用後門請求標頭或參數，隱蔽且直接地觸發動態指令代碼執行 (eval / exec)
+      - pattern: "if ($REQ.headers.$HEADER) { eval($REQ.headers.$HEADER); }"
+      - pattern: "if ($REQ.query.$PARAM) { exec($REQ.query.$PARAM, ...); }"
+
+      # Pattern 2: 硬編碼秘密萬能鑰匙，透過特定的特殊常值字串直接跳過密碼與身分驗證
+      - pattern: "if ($INPUT === \"...\") { return true; }"
+      - pattern: "if ($USER === \"...\") { $SESSION.isAdmin = true; }"
+
+      # Pattern 3: 邏輯炸彈 (Logic Bomb) 特徵 - 秘密檢查特定的日期（如時間戳或特定年份）或秘密條件來觸發敏感操作
+      - pattern: "if (new Date().getFullYear() === $YEAR) { ... }"
+      - pattern: "if (Date.now() > $TIMESTAMP) { ... }"
+
+    message: "Hidden Functionality / Backdoor (CWE-912): The application contains hidden functionality, hard-coded super-user bypass mechanisms, or logic bombs that execute restricted code based on undocumented trigger inputs (e.g., custom headers, magic strings, or specific timestamps). This poses an extreme risk of full system compromise. Audit all short-circuit logic and restrict dynamic execution APIs."
+    languages: [typescript]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-912']
+
+  - id: ts-untrusted-module-inclusion-cwe829
+    pattern-either:
+      # Pattern 1: 使用不安全的明文 HTTP 協定網路路徑動態載入外部腳本或內容
+      - pattern: "axios.get(\"http://...\")"
+      - pattern: "fetch(\"http://...\")"
+
+      # Pattern 2: 使用受外部前端參數控制的字串動態執行 require() 或 import()，導致載入惡意本機或網路模組
+      - pattern: "require($REQ.body.$PARAM)"
+      - pattern: "require($REQ.query.$PARAM)"
+      - pattern: "import($REQ.body.$PARAM)"
+
+      # Pattern 3: 從系統公共可讀寫的暫存目錄（如 /tmp）載入可能被惡意篡改或預先植入的模組檔
+      - pattern: "require(\"/tmp/...\")"
+      - pattern: "import(\"/tmp/...\")"
+
+    message: "Inclusion of Functionality from Untrusted Control Sphere (CWE-829): The application imports or executes code from an untrusted sphere, such as plain HTTP remote sources, fully user-controlled dynamic module paths, or shared temporary directories (/tmp). This can lead to Remote Code Execution (RCE) or malicious dependency hijacking. Ensure all imported code comes from trusted, verified, and immutable repositories, and validate dynamic paths against a strict whitelist."
+    languages: [typescript]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-829']
+
+  - id: ts-prototype-pollution-cwe1321
+    pattern-either:
+      # Pattern 1: 不安全的動態屬性指派，直接透過未經過濾的鍵值（如 req.body 傳入的鍵）寫入物件，最常見於自定義的 merge 或 path setter
+      - pattern: "$OBJ[$KEY] = $VALUE"
+      - pattern: "$OBJ[$KEY][$SUBKEY] = $VALUE"
+
+      # Pattern 2: 遞迴合併（Recursive Merge）或克隆函式中，直接將來源物件的屬性無條件複製到目標物件中，且完全沒有檢查 __proto__ 或 constructor
+      - pattern: |
+          for (let $K in $SRC) {
+            ...
+            $TARGET[$K] = $SRC[$K];
+          }
+      - pattern: |
+          for (let $K of Object.keys($SRC)) {
+            ...
+            $TARGET[$K] = $SRC[$K];
+          }
+
+    message: "Improperly Controlled Modification of Object Prototype Attributes ('Prototype Pollution') (CWE-1321): The application recursively merges or assigns properties to an object using untrusted keys without filtering dangerous attributes such as '__proto__' or 'constructor.prototype'. This allows attackers to inject arbitrary properties into the global Object.prototype, leading to denial of service, authorization bypass, or remote code execution. Always implement a strict blocklist for dangerous keys or use Object.create(null) for data-holding dictionaries."
+    languages: [typescript]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-1321']
+
+  - id: ts-improper-certificate-verification-cwe295
+    pattern-either:
+      # Pattern 1: 透過全域環境變數 NODE_TLS_REJECT_UNAUTHORIZED 停用整個 Node.js 行程的 TLS 憑證驗證
+      - pattern: "process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0'"
+      - pattern: "process.env.NODE_TLS_REJECT_UNAUTHORIZED = \"0\""
+
+      # Pattern 2: 在建立 https.Agent 或 tls.connect 時，將 rejectUnauthorized 屬性設為 false
+      - pattern: "new https.Agent({ ..., rejectUnauthorized: false, ... })"
+      - pattern: "tls.connect({ ..., rejectUnauthorized: false, ... }, ...)"
+
+      # Pattern 3: 在 Axios 或其他 HTTP 套件的請求配置中，就地停用憑證驗證
+      - pattern: "axios.get($URL, { ..., rejectUnauthorized: false, ... })"
+      - pattern: "axios.post($URL, $DATA, { ..., rejectUnauthorized: false, ... })"
+
+    message: "Improper Certificate Verification (CWE-295): The application explicitly disables TLS/SSL certificate verification by setting 'rejectUnauthorized: false' or 'NODE_TLS_REJECT_UNAUTHORIZED = 0'. This makes the application highly vulnerable to Man-in-the-Middle (MITM) attacks, allowing attackers to intercept or modify encrypted traffic. Never disable certificate validation in production."
+    languages: [typescript]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-295']
+
+  - id: ts-weak-hash-algorithm-cwe328
+    pattern-either:
+      # Pattern 1: 使用 Node.js 內建 crypto 模組直接建立不安全的 MD5 或 SHA1 雜湊實例
+      - pattern: "crypto.createHash('md5')"
+      - pattern: "crypto.createHash(\"md5\")"
+      - pattern: "crypto.createHash('sha1')"
+      - pattern: "crypto.createHash(\"sha1\")"
+
+      # Pattern 2: 在建立 HMAC (Hash-based Message Authentication Code) 時使用了弱雜湊演算法
+      - pattern: "crypto.createHmac('md5', ...)"
+      - pattern: "crypto.createHmac(\"md5\", ...)"
+      - pattern: "crypto.createHmac('sha1', ...)"
+      - pattern: "crypto.createHmac(\"sha1\", ...)"
+
+    message: "Use of Weak Hash (CWE-328): The application uses a weak or broken cryptographic hash algorithm (such as MD5 or SHA-1) which is vulnerable to collision attacks. Do not use MD5 or SHA-1 for security-sensitive contexts like password hashing, digital signatures, or integrity checks. Upgrade to secure alternatives like SHA-256 (crypto.createHash('sha256')) or memory-hard functions like Argon2 / bcrypt for passwords."
+    languages: [typescript]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-328']

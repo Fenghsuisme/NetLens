@@ -1,0 +1,202 @@
+rules:
+  # ════════════════════════════════════════════════════════
+  # 程式碼執行補強規則（CWE-94）
+  #
+  # 補強原因：實測召回率 107/150，漏抓 43 筆幾乎全是 PHP，
+  #   情境反覆出現 eval() 與 create_function()。
+  #   實測確認 Semgrep 的 `eval(...)` pattern 在 PHP 可正常運作，
+  #   故推測是現有 php.yml 未涵蓋這些形式。
+  #
+  # 本規則涵蓋四種語言的動態程式碼執行形式：
+  #   PHP     eval / create_function / assert / preg_replace 的 /e 修飾符
+  #           call_user_func 搭配使用者輸入 / 變數變數 $$x
+  #   Python  eval / exec / compile / __import__ / importlib
+  #   JS      eval / new Function / setTimeout(字串) / vm 模組
+  #   Java    ScriptEngine.eval / Class.forName / Method.invoke
+  # ════════════════════════════════════════════════════════
+
+  # ── PHP ──
+  - id: php-code-execution-eval
+    languages: [php]
+    severity: ERROR
+    message: >-
+      Code Execution (CWE-94): 將字串當作 PHP 程式碼執行。
+      若字串含使用者輸入，攻擊者可執行任意程式碼。
+      應改用白名單對照表，或以安全的運算式解析器取代。
+    metadata:
+      cwe: [CWE-94]
+      category: security
+      confidence: HIGH
+    pattern-either:
+      - pattern: eval(...)
+      - pattern: assert($X)
+      - pattern: create_function(...)
+
+  - id: php-code-execution-dynamic-call
+    languages: [php]
+    severity: ERROR
+    message: >-
+      Code Execution (CWE-94): 以使用者可控的值動態呼叫函式或建立物件。
+      應以白名單限定可呼叫的函式名。
+    metadata:
+      cwe: [CWE-94]
+      category: security
+      confidence: MEDIUM
+    pattern-either:
+      - pattern: call_user_func($_GET[...], ...)
+      - pattern: call_user_func($_POST[...], ...)
+      - pattern: call_user_func($_REQUEST[...], ...)
+      - pattern: call_user_func_array($_GET[...], ...)
+      - pattern: call_user_func_array($_POST[...], ...)
+      - patterns:
+          - pattern: |
+              $F = $_GET[...];
+              ...
+              $F(...);
+      - patterns:
+          - pattern: |
+              $F = $_POST[...];
+              ...
+              $F(...);
+      - patterns:
+          - pattern: |
+              $F = $_REQUEST[...];
+              ...
+              $F(...);
+
+  - id: php-preg-replace-eval-modifier
+    languages: [php]
+    severity: ERROR
+    message: >-
+      Code Execution (CWE-94): preg_replace 使用 /e 修飾符會將替換字串
+      當作 PHP 程式碼執行（PHP 7 已移除，但舊系統仍見）。
+      應改用 preg_replace_callback。
+    metadata:
+      cwe: [CWE-94]
+      category: security
+      confidence: HIGH
+    patterns:
+      - pattern: preg_replace($PAT, ...)
+      - metavariable-regex:
+          metavariable: $PAT
+          regex: ^["'].*/[a-zA-Z]*e[a-zA-Z]*["']$
+
+  # ── Python ──
+  - id: python-code-execution-supplement
+    languages: [python]
+    severity: ERROR
+    message: >-
+      Code Execution (CWE-94): 將字串當作 Python 程式碼執行或動態載入模組。
+      應改用 ast.literal_eval（僅解析字面值）或白名單對照表。
+    metadata:
+      cwe: [CWE-94]
+      category: security
+      confidence: HIGH
+    pattern-either:
+      - pattern: eval(...)
+      - pattern: exec(...)
+      - pattern: compile(...)
+      - pattern: __import__($X)
+      - pattern: importlib.import_module($X)
+      - pattern: types.FunctionType(...)
+      - pattern: $F = eval(...)
+      - pattern: |
+          $CODE = ...
+          ...
+          exec($CODE)
+
+  # ── JavaScript / TypeScript ──
+  - id: js-code-execution-supplement
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: >-
+      Code Execution (CWE-94): 將字串當作 JavaScript 執行。
+      應避免動態程式碼執行，改用查表或安全的運算式解析器。
+    metadata:
+      cwe: [CWE-94]
+      category: security
+      confidence: HIGH
+    pattern-either:
+      - pattern: eval(...)
+      - pattern: new Function(...)
+      - pattern: Function(...)
+      - pattern: vm.runInNewContext(...)
+      - pattern: vm.runInThisContext(...)
+      - pattern: vm.runInContext(...)
+      - pattern: vm.Script(...)
+      # setTimeout / setInterval 傳字串等同 eval
+      - patterns:
+          - pattern-either:
+              - pattern: setTimeout($CODE, ...)
+              - pattern: setInterval($CODE, ...)
+          - metavariable-regex:
+              metavariable: $CODE
+              regex: ^["'`].*["'`]$
+
+  - id: js-dynamic-require
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: >-
+      Code Execution (CWE-94): 以使用者可控的值動態載入模組，
+      攻擊者可載入非預期的模組或路徑。應以白名單限定可載入的模組。
+    metadata:
+      cwe: [CWE-94]
+      category: security
+      confidence: MEDIUM
+    pattern-either:
+      - pattern: require($REQ.query.$X)
+      - pattern: require($REQ.body.$X)
+      - pattern: require($REQ.params.$X)
+      - pattern: require($A + $B)
+      - pattern: require(`...`)
+      - pattern: import($REQ.query.$X)
+      - pattern: import($A + $B)
+
+  # ── Java ──
+  - id: java-script-engine-eval
+    languages: [java]
+    severity: ERROR
+    message: >-
+      Code Execution (CWE-94): 以 ScriptEngine 執行動態產生的腳本。
+      若腳本內容含使用者輸入，等同任意程式碼執行。
+      應避免動態腳本，或以嚴格沙箱限制執行環境。
+    metadata:
+      cwe: [CWE-94]
+      category: security
+      confidence: HIGH
+    pattern-either:
+      - pattern: $ENGINE.eval($A + $B)
+      - pattern: $ENGINE.eval($A + $B, ...)
+      - pattern: $ENGINE.eval(String.format(...))
+      - patterns:
+          - pattern: |
+              String $S = $A + $B;
+              ...
+              $ENGINE.eval($S);
+      - pattern: $SHELL.evaluate($X)
+      - pattern: new GroovyShell(...).evaluate($X)
+
+  - id: java-dynamic-class-loading
+    languages: [java]
+    severity: ERROR
+    message: >-
+      Code Execution (CWE-94): 以使用者可控的值動態載入類別或呼叫方法。
+      攻擊者可載入非預期的類別並執行其程式碼。
+      應以白名單限定可載入的類別名。
+    metadata:
+      cwe: [CWE-94]
+      category: security
+      confidence: MEDIUM
+    pattern-either:
+      - pattern: Class.forName($REQ.getParameter(...))
+      - pattern: Class.forName($A + $B)
+      - patterns:
+          - pattern: |
+              String $C = $REQ.getParameter(...);
+              ...
+              Class.forName($C);
+      - patterns:
+          - pattern: |
+              String $M = $REQ.getParameter(...);
+              ...
+              $CLS.getMethod($M, ...).invoke(...);

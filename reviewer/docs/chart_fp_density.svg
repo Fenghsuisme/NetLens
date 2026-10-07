@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 470" font-family="'Noto Sans TC','PingFang TC','Microsoft JhengHei','Heiti TC',sans-serif">
+  <rect x="0" y="0" width="760" height="470" fill="#ffffff"/>
+  <text x="380" y="40" text-anchor="middle" font-size="22" font-weight="700" fill="#0f172a">誤報密度下降（真實專案 64 萬行）</text>
+  <text x="380" y="66" text-anchor="middle" font-size="14" fill="#64748b">純 Semgrep → 加入模型過濾 → 規則收窄　|　整體降幅約 84%</text>
+
+  <!-- gridlines + y ticks -->
+  <line x1="95" y1="95" x2="710" y2="95" stroke="#eef2f6"/>
+  <line x1="95" y1="167.5" x2="710" y2="167.5" stroke="#eef2f6"/>
+  <line x1="95" y1="240" x2="710" y2="240" stroke="#eef2f6"/>
+  <line x1="95" y1="312.5" x2="710" y2="312.5" stroke="#eef2f6"/>
+  <text x="82" y="99" text-anchor="end" font-size="12" fill="#94a3b8">4</text>
+  <text x="82" y="171" text-anchor="end" font-size="12" fill="#94a3b8">3</text>
+  <text x="82" y="244" text-anchor="end" font-size="12" fill="#94a3b8">2</text>
+  <text x="82" y="316" text-anchor="end" font-size="12" fill="#94a3b8">1</text>
+  <text x="82" y="389" text-anchor="end" font-size="12" fill="#94a3b8">0</text>
+  <text x="60" y="88" font-size="12" fill="#64748b">/KLOC</text>
+
+  <!-- axes -->
+  <line x1="95" y1="95" x2="95" y2="385" stroke="#cbd5e1" stroke-width="1.5"/>
+  <line x1="95" y1="385" x2="710" y2="385" stroke="#cbd5e1" stroke-width="1.5"/>
+
+  <!-- threshold -->
+  <line x1="95" y1="312.5" x2="710" y2="312.5" stroke="#ef4444" stroke-width="1.5" stroke-dasharray="6,4"/>
+  <text x="706" y="304" text-anchor="end" font-size="12" font-weight="600" fill="#ef4444">可接受門檻 1.0 /KLOC</text>
+
+  <!-- bars -->
+  <rect x="142" y="124" width="96" height="261" rx="6" fill="#ef4444"/>
+  <text x="190" y="114" text-anchor="middle" font-size="17" font-weight="700" fill="#0f172a">3.6</text>
+  <text x="190" y="406" text-anchor="middle" font-size="13.5" fill="#334155">純 Semgrep</text>
+
+  <rect x="354" y="308" width="96" height="77" rx="6" fill="#3b82f6"/>
+  <text x="402" y="298" text-anchor="middle" font-size="17" font-weight="700" fill="#0f172a">1.06</text>
+  <text x="402" y="406" text-anchor="middle" font-size="13.5" fill="#334155">+ 模型過濾</text>
+
+  <rect x="566" y="344" width="96" height="41" rx="6" fill="#22c55e"/>
+  <text x="614" y="334" text-anchor="middle" font-size="17" font-weight="700" fill="#0f172a">0.56</text>
+  <text x="614" y="406" text-anchor="middle" font-size="13.5" fill="#334155">+ 規則收窄</text>
+
+  <!-- reduction labels -->
+  <text x="296" y="238" text-anchor="middle" font-size="14" font-weight="700" fill="#2563eb">↓ 71%</text>
+  <text x="508" y="338" text-anchor="middle" font-size="14" font-weight="700" fill="#16a34a">↓ 47%</text>
+</svg>

@@ -1,0 +1,54 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1180 470" font-family="'Noto Sans TC','PingFang TC','Microsoft JhengHei','Heiti TC',sans-serif">
+  <defs>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="3" stdDeviation="5" flood-color="#0f172a" flood-opacity="0.12"/>
+    </filter>
+    <marker id="arrow" markerWidth="12" markerHeight="10" refX="8.5" refY="4" orient="auto">
+      <path d="M0,0 L9,4 L0,8 Z" fill="#94a3b8"/>
+    </marker>
+    <marker id="arrowT" markerWidth="12" markerHeight="10" refX="8.5" refY="4" orient="auto">
+      <path d="M0,0 L9,4 L0,8 Z" fill="#0891b2"/>
+    </marker>
+  </defs>
+
+  <rect x="0" y="0" width="1180" height="470" fill="#ffffff"/>
+
+  <!-- Title -->
+  <text x="590" y="48" text-anchor="middle" font-size="28" font-weight="700" fill="#0f172a">NetLens Reviewer</text>
+  <text x="590" y="78" text-anchor="middle" font-size="15" fill="#64748b">兩階段漏洞偵測架構　×　Loop Engineering</text>
+
+  <!-- NetLens container -->
+  <rect x="280" y="112" width="690" height="140" rx="18" fill="#f8fafc" stroke="#cbd5e1" stroke-width="1.5"/>
+  <text x="300" y="135" font-size="13" font-weight="700" fill="#64748b">NetLens Reviewer 兩階段管道</text>
+
+  <!-- 原始碼 -->
+  <rect x="70" y="150" width="150" height="78" rx="14" fill="#ffffff" stroke="#cbd5e1" stroke-width="2" filter="url(#shadow)"/>
+  <text x="145" y="184" text-anchor="middle" font-size="17" font-weight="700" fill="#0f172a">原始碼</text>
+  <text x="145" y="207" text-anchor="middle" font-size="12.5" fill="#64748b">程式碼輸入</text>
+
+  <!-- ① Semgrep -->
+  <rect x="300" y="150" width="180" height="78" rx="14" fill="#ffffff" stroke="#2563eb" stroke-width="2" filter="url(#shadow)"/>
+  <text x="390" y="184" text-anchor="middle" font-size="17" font-weight="700" fill="#2563eb">① Semgrep</text>
+  <text x="390" y="207" text-anchor="middle" font-size="12.5" fill="#64748b">選點・定位</text>
+
+  <!-- ② CodeBERT -->
+  <rect x="510" y="150" width="180" height="78" rx="14" fill="#ffffff" stroke="#7c3aed" stroke-width="2" filter="url(#shadow)"/>
+  <text x="600" y="184" text-anchor="middle" font-size="17" font-weight="700" fill="#7c3aed">② CodeBERT</text>
+  <text x="600" y="207" text-anchor="middle" font-size="12.5" fill="#64748b">偵測・分類</text>
+
+  <!-- 報告 -->
+  <rect x="760" y="150" width="180" height="78" rx="14" fill="#0f172a" stroke="#0f172a" stroke-width="2" filter="url(#shadow)"/>
+  <text x="850" y="184" text-anchor="middle" font-size="17" font-weight="700" fill="#ffffff">掃描報告</text>
+  <text x="850" y="207" text-anchor="middle" font-size="12.5" fill="#94a3b8">分層結果</text>
+
+  <!-- spine arrows -->
+  <path d="M220,189 L296,189" stroke="#94a3b8" stroke-width="2.5" fill="none" marker-end="url(#arrow)"/>
+  <path d="M480,189 L506,189" stroke="#94a3b8" stroke-width="2.5" fill="none" marker-end="url(#arrow)"/>
+  <path d="M690,189 L756,189" stroke="#94a3b8" stroke-width="2.5" fill="none" marker-end="url(#arrow)"/>
+
+  <!-- Loop Engineering loop -->
+  <path d="M850,228 V362 Q850,392 820,392 H175 Q145,392 145,362 V232"
+        stroke="#0891b2" stroke-width="2.5" fill="none" stroke-dasharray="7,5" marker-end="url(#arrowT)"/>
+  <rect x="350" y="368" width="460" height="48" rx="24" fill="#ecfeff" stroke="#67e8f9" stroke-width="1.5"/>
+  <text x="580" y="398" text-anchor="middle" font-size="15" font-weight="700" fill="#0e7490">Loop Engineering　·　生成 → 掃描 → 修復 → 迭代</text>
+</svg>

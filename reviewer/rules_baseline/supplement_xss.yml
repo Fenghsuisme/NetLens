@@ -1,0 +1,154 @@
+rules:
+  # ════════════════════════════════════════════════════════
+  # XSS 補強規則（CWE-79）
+  #
+  # 實測 XSS 召回率 6/10，漏抓 4 筆分兩種模式：
+  #   模式一：HTML 字串拼接／模板字串後直接輸出（規則 1-4）
+  #   模式二：模板引擎關閉自動轉義（規則 5，掃模板檔）
+  #
+  # 設計歷程（三次修正）：
+  #   v1 用 pattern-regex 檢查匹配片段 → 錯，它對整個檔案做正則
+  #   v2 對每個 + 運算都報 → 同段 HTML 噴 9 個重複
+  #   v3 用 "<...>..." 限制字面值 → 對多行拼接無效，變成 0 命中
+  #   v4（本版）抓輸出點 + metavariable-regex 驗證內容含 HTML 標籤
+  # ════════════════════════════════════════════════════════
+
+  # ── Java：拼接的 HTML 被回傳 ──
+  - id: java-xss-html-return
+    languages: [java]
+    severity: ERROR
+    message: >-
+      XSS (CWE-79): 以字串拼接組成的 HTML 被回傳，外部輸入未經實體編碼。
+      應改用模板引擎自動轉義，或以 HtmlUtils.htmlEscape() 處理外部輸入。
+    metadata:
+      cwe: [CWE-79]
+      category: security
+      confidence: HIGH
+    patterns:
+      - pattern: |
+          String $H = $EXPR;
+          ...
+          return $H;
+      - metavariable-regex:
+          metavariable: $EXPR
+          regex: (?s).*<\s*(html|body|div|span|p|h[1-6]|table|td|tr|li|ul|strong|em|form|input|iframe|script)[\s>].*\+.*
+      - pattern-not-inside: |
+          $X = HtmlUtils.htmlEscape(...);
+          ...
+      - pattern-not-inside: |
+          $X = StringEscapeUtils.escapeHtml4(...);
+          ...
+
+  - id: java-xss-writer-concat
+    languages: [java]
+    severity: ERROR
+    message: "XSS (CWE-79): 直接將拼接字串寫入 HTTP 回應，未經編碼。"
+    metadata:
+      cwe: [CWE-79]
+      category: security
+      confidence: HIGH
+    pattern-either:
+      - pattern: $RESP.getWriter().print($A + $B)
+      - pattern: $RESP.getWriter().write($A + $B)
+      - pattern: $RESP.getWriter().println($A + $B)
+
+  # ── JavaScript / TypeScript：模板字串或拼接組 HTML 後送出 ──
+  - id: js-xss-html-send
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: >-
+      XSS (CWE-79): 以模板字串或拼接組成的 HTML 被送出，外部輸入未經轉義。
+      應使用模板引擎自動轉義，或以 escape-html 套件處理。
+    metadata:
+      cwe: [CWE-79]
+      category: security
+      confidence: HIGH
+    patterns:
+      - pattern-either:
+          - pattern: |
+              $H = $EXPR;
+              ...
+              $RES.send($H);
+          - pattern: |
+              $H = $EXPR;
+              ...
+              $RES.end($H);
+          - pattern: |
+              $H = $EXPR;
+              ...
+              $RES.write($H);
+          - pattern: $RES.send($EXPR)
+          - pattern: $RES.end($EXPR)
+          - pattern: $RES.write($EXPR)
+      # 內容必須同時含 HTML 標籤與變數插值／拼接
+      - metavariable-regex:
+          metavariable: $EXPR
+          regex: (?s).*<\s*(html|body|div|span|p|h[1-6]|table|td|tr|li|ul|strong|em|form|input|iframe|script)[\s>].*(\$\{|\+\s*\w).*
+
+  # ── PHP：輸出含 HTML 與外部輸入 ──
+  - id: php-xss-echo-html
+    languages: [php]
+    severity: ERROR
+    message: >-
+      XSS (CWE-79): 直接輸出含外部輸入的 HTML，未經 htmlspecialchars() 編碼。
+    metadata:
+      cwe: [CWE-79]
+      category: security
+      confidence: HIGH
+    patterns:
+      - pattern-either:
+          - pattern: echo $EXPR;
+          - pattern: print $EXPR;
+      - metavariable-regex:
+          metavariable: $EXPR
+          regex: (?s).*<\s*(html|body|div|span|p|h[1-6]|table|td|strong|form|input)[\s>].*(\.\s*\$|\$\w).*
+      - pattern-not: echo htmlspecialchars(...);
+      - pattern-not: echo htmlentities(...);
+      - pattern-not: print htmlspecialchars(...);
+
+  # ── Python：f-string 組 HTML 後回傳 ──
+  - id: python-xss-html-return
+    languages: [python]
+    severity: ERROR
+    message: >-
+      XSS (CWE-79): 以 f-string 或拼接組成 HTML 並回傳，未經轉義。
+      應使用 render_template（自動轉義）或 markupsafe.escape()。
+    metadata:
+      cwe: [CWE-79]
+      category: security
+      confidence: HIGH
+    patterns:
+      - pattern-either:
+          - pattern: return $EXPR
+          - pattern: |
+              $H = $EXPR
+              ...
+              return $H
+      - metavariable-regex:
+          metavariable: $EXPR
+          regex: (?s).*<\s*(html|body|div|span|p|h[1-6]|table|td|strong|script)[\s>].*(\{[\w.\[\]]+\}|\+\s*\w).*
+      - pattern-not: return render_template(...)
+      - pattern-not: return $X.format(escape(...))
+
+  # ── 模板檔：關閉自動轉義的輸出語法 ──
+  # 補足跨檔案盲區：res.render() 本身正常，危險在模板檔內
+  - id: template-xss-unescaped
+    languages: [generic]
+    severity: WARNING
+    message: >-
+      XSS (CWE-79): 模板使用關閉自動轉義的輸出語法
+      （Handlebars 三大括號、EJS <%- %>），
+      會直接輸出原始 HTML，若含使用者輸入將導致 XSS。
+    metadata:
+      cwe: [CWE-79]
+      category: security
+      confidence: MEDIUM
+    paths:
+      include:
+        - "*.ejs"
+        - "*.hbs"
+        - "*.handlebars"
+        - "*.mustache"
+    pattern-either:
+      - pattern-regex: \{\{\{\s*[\w.]+\s*\}\}\}
+      - pattern-regex: <%-\s*[\w.]+\s*%>

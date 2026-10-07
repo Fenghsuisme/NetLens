@@ -1,0 +1,78 @@
+rules:
+  # ════════════════════════════════════════════════════════
+  # 不受限檔案上傳補強規則（CWE-434）
+  #
+  # 補強原因：實測本地規則 php 0/46、js 0/31、python 1/42 全滅
+  #   （java 已有規則，35/41）。上傳漏洞的 sink 明確
+  #   （move_uploaded_file / file.save / multer / .mv），
+  #   但「安全」與「危險」版本呼叫同一 sink，差別在有無副檔名／MIME 驗證。
+  #
+  # 依兩階段架構職責分工（Semgrep 高召回、CodeBERT 高精確），
+  # 此處以 sink 為錨點保召回，帶驗證的安全上傳所產生的誤報交由模型過濾；
+  # 可低成本排除的安全形式（multer 的 fileFilter）則直接排除。
+  # ════════════════════════════════════════════════════════
+
+  # ── PHP：move_uploaded_file 直接落地 ──
+  - id: php-unrestricted-upload-cwe434
+    languages: [php]
+    severity: ERROR
+    message: >-
+      Unrestricted File Upload (CWE-434): 直接以 move_uploaded_file 儲存上傳檔，
+      未驗證副檔名／MIME 類型。攻擊者可上傳 .php 等可執行檔取得遠端程式碼執行。
+      應以白名單限定副檔名、驗證 MIME、並將上傳目錄設為不可執行。
+    metadata:
+      cwe: [CWE-434]
+      category: security
+    pattern-either:
+      - pattern: move_uploaded_file(...)
+
+  # ── Python：Flask/Werkzeug FileStorage.save ──
+  # 樣本形態：file = request.files['x'] / request.files.get('x'); file.save(path)
+  - id: python-unrestricted-upload-cwe434
+    languages: [python]
+    severity: ERROR
+    message: >-
+      Unrestricted File Upload (CWE-434): 將 request.files 的上傳檔以 save() 直接
+      落地，未驗證副檔名／MIME。應以白名單副檔名 + secure_filename 並實際擋下不符者。
+    metadata:
+      cwe: [CWE-434]
+      category: security
+    patterns:
+      - pattern: $F.save(...)
+      - pattern-either:
+          - pattern-inside: |
+              $F = $REQ.files[...]
+              ...
+          - pattern-inside: |
+              $F = $REQ.files.get(...)
+              ...
+
+  - id: python-unrestricted-upload-direct-cwe434
+    languages: [python]
+    severity: ERROR
+    message: >-
+      Unrestricted File Upload (CWE-434): 上傳檔未驗證副檔名／MIME 即直接 save()。
+    metadata:
+      cwe: [CWE-434]
+      category: security
+    pattern-either:
+      - pattern: $REQ.files[$K].save(...)
+      - pattern: $REQ.files.get(...).save(...)
+
+  # ── JavaScript：express-fileupload 的 .mv 與 multer（無 fileFilter）──
+  - id: js-unrestricted-upload-cwe434
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: >-
+      Unrestricted File Upload (CWE-434): 以 express-fileupload 的 mv() 或未設
+      fileFilter 的 multer 儲存上傳檔，未限制檔案型別。
+      應設定 multer 的 fileFilter/limits 或驗證副檔名與 MIME。
+    metadata:
+      cwe: [CWE-434]
+      category: security
+    pattern-either:
+      - pattern: $F.mv(...)
+      # multer 未設 fileFilter（含 fileFilter 的安全設定以 pattern-not-regex 排除）
+      - patterns:
+          - pattern: multer(...)
+          - pattern-not-regex: fileFilter

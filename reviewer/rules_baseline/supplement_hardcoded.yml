@@ -1,0 +1,116 @@
+rules:
+  # ════════════════════════════════════════════════════════
+  # 硬編碼憑證補強規則（CWE-798）
+  #
+  # 補強原因：
+  #   實測 Gemini 測試集，自訂規則與官方 p/security-audit 都漏掉
+  #   Java 的 `private static final String AWS_ACCESS_KEY = "..."` 形式。
+  #
+  # 設計要點：
+  #   硬編碼密碼的特徵不是「呼叫某個危險函式」（sink-based），
+  #   而是「賦值給語意敏感的變數名」，
+  #   因此改用 metavariable-regex 比對變數名，而非比對函式呼叫。
+  #
+  # 語法注意（第一版 PatternParseError 的原因）：
+  #   - Java 不能用 $MODS 匹配 static final 等修飾詞；
+  #     直接寫 `String $VAR = "...";` 即可涵蓋含修飾詞的宣告
+  #   - metavariable 不能放在字串常值內（"$VALUE" 會解析失敗），
+  #     值的過濾改用 metavariable-regex 或省略
+  # ════════════════════════════════════════════════════════
+
+  - id: java-hardcoded-credential-field
+    languages: [java]
+    severity: ERROR
+    message: >-
+      Hardcoded credential (CWE-798): 敏感憑證直接寫在程式碼中。
+      應改用環境變數或密鑰管理服務（如 AWS Secrets Manager、Vault）。
+    metadata:
+      cwe:
+        - CWE-798
+      category: security
+      confidence: HIGH
+    patterns:
+      - pattern-either:
+          - pattern: String $VAR = "...";
+          - pattern: $OBJ.$VAR = "...";
+      - metavariable-regex:
+          metavariable: $VAR
+          regex: (?i).*(password|passwd|pwd|secret|token|api_?key|access_?key|private_?key|credential|auth_?key|bearer).*
+      # 排除佔位符（YOUR_PASSWORD_HERE、CHANGEME 等，非真實憑證）
+      - pattern-not-regex: (?i)(YOUR_|CHANGE_?ME|TODO|FIXME|PLACEHOLDER|EXAMPLE_ONLY|<your|xxxxx|dummy|sample_key)
+
+  - id: python-hardcoded-credential-assign
+    languages: [python]
+    severity: ERROR
+    message: >-
+      Hardcoded credential (CWE-798): 敏感憑證直接寫在程式碼中。
+      應改用環境變數（os.environ）或密鑰管理服務。
+    metadata:
+      cwe:
+        - CWE-798
+      category: security
+      confidence: HIGH
+    patterns:
+      - pattern-either:
+          - pattern: $VAR = "..."
+          - pattern: self.$VAR = "..."
+      - metavariable-regex:
+          metavariable: $VAR
+          regex: (?i).*(password|passwd|pwd|secret|token|api_?key|access_?key|private_?key|credential|auth_?key|bearer).*
+      # 排除佔位符與環境變數讀取
+      - pattern-not-regex: (?i)(YOUR_|CHANGE_?ME|TODO|FIXME|PLACEHOLDER|EXAMPLE_ONLY|<your|xxxxx|dummy|sample_key)
+
+  - id: js-hardcoded-credential-assign
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: >-
+      Hardcoded credential (CWE-798): 敏感憑證直接寫在程式碼中。
+      應改用環境變數（process.env）或密鑰管理服務。
+    metadata:
+      cwe:
+        - CWE-798
+      category: security
+      confidence: HIGH
+    patterns:
+      - pattern-either:
+          - pattern: const $VAR = "...";
+          - pattern: let $VAR = "...";
+          - pattern: var $VAR = "...";
+          - pattern: this.$VAR = "...";
+      - metavariable-regex:
+          metavariable: $VAR
+          regex: (?i).*(password|passwd|pwd|secret|token|api_?key|access_?key|private_?key|credential|auth_?key|bearer).*
+      - pattern-not-regex: (?i)(YOUR_|CHANGE_?ME|TODO|FIXME|PLACEHOLDER|EXAMPLE_ONLY|<your|xxxxx|dummy|sample_key)
+
+  - id: php-hardcoded-credential-assign
+    languages: [php]
+    severity: ERROR
+    message: >-
+      Hardcoded credential (CWE-798): 敏感憑證直接寫在程式碼中。
+      應改用環境變數（getenv）或密鑰管理服務。
+    metadata:
+      cwe:
+        - CWE-798
+      category: security
+      confidence: HIGH
+    patterns:
+      - pattern: $VAR = "...";
+      - metavariable-regex:
+          metavariable: $VAR
+          regex: (?i).*(password|passwd|pwd|secret|token|api_?key|access_?key|private_?key|credential|auth_?key|bearer).*
+      - pattern-not-regex: (?i)(YOUR_|CHANGE_?ME|TODO|FIXME|PLACEHOLDER|EXAMPLE_ONLY|<your|xxxxx|dummy|sample_key)
+
+  # 雲端服務金鑰格式（跨語言，最高信心）
+  # 不依賴變數名，即使變數叫 foo 也能抓到
+  - id: cloud-provider-key-literal
+    languages: [java, python, javascript, typescript, php, go, csharp]
+    severity: ERROR
+    message: >-
+      Hardcoded cloud credential (CWE-798): 偵測到雲端服務金鑰格式的字串常數。
+      這類金鑰一旦外洩可直接被用於存取雲端資源，應立即輪替並改用密鑰管理。
+    metadata:
+      cwe:
+        - CWE-798
+      category: security
+      confidence: HIGH
+    pattern-regex: (AKIA[0-9A-Z]{16}|ASIA[0-9A-Z]{16}|ghp_[A-Za-z0-9]{36}|gho_[A-Za-z0-9]{36}|sk-[A-Za-z0-9]{20,}|xox[baprs]-[A-Za-z0-9-]{10,}|AIza[0-9A-Za-z_\-]{35}|-----BEGIN [A-Z ]*PRIVATE KEY-----)

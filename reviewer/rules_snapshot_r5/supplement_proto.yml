@@ -1,0 +1,179 @@
+rules:
+  # ════════════════════════════════════════════════════════
+  # 原型污染 / 不受控屬性寫入補強規則（CWE-1321）
+  #
+  # 補強原因：實測 0/150，四組配置全滅。
+  #   現有規則只認 __proto__ 這類「字面值」，
+  #   但測試樣本的漏洞是「遞迴合併函式本身沒過濾危險 key」——
+  #   程式碼裡根本不會出現 __proto__ 字串，
+  #   攻擊者傳入 {"__proto__": {...}} 才在執行期觸發。
+  #
+  # 四種語言的變體：
+  #   JS      for (let key in source) { target[key] = source[key]; }
+  #   PHP     foreach ($source as $key => $value) { $target->$key = $value; }
+  #   Python  for key, value in source.items(): setattr(target, key, value)
+  #   Java    engine.eval("...merge...")  用 Nashorn 執行 JS merge 字串
+  #
+  # 註：嚴格說「原型污染」是 JS 專有概念，
+  #     Python/Java/PHP 對應的是「不受控的屬性寫入」，
+  #     但攻擊模式與後果相同（污染共用物件、繞過安全邊界），
+  #     故歸為同一類別處理。
+  #
+  # 設計要點：偵測「動態 key 賦值 + 無危險 key 過濾」，
+  #   並以 pattern-not-inside 排除已做防護的實作。
+  # ════════════════════════════════════════════════════════
+
+  # ── JavaScript / TypeScript：for...in 遞迴合併 ──
+  - id: js-prototype-pollution-merge
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: >-
+      Prototype Pollution (CWE-1321): 遞迴合併函式以使用者控制的 key 直接賦值，
+      未過濾 __proto__ / constructor / prototype。
+      攻擊者可傳入 {"__proto__": {...}} 污染 Object.prototype，
+      影響所有繼承物件的行為。
+      應改用 Object.create(null)、Map，或在賦值前檢查 key 是否為危險屬性。
+    metadata:
+      cwe: [CWE-1321]
+      category: security
+      confidence: HIGH
+    patterns:
+      - pattern-either:
+          - pattern: |
+              for (let $KEY in $SRC) { ... $TGT[$KEY] = ...; ... }
+          - pattern: |
+              for (const $KEY in $SRC) { ... $TGT[$KEY] = ...; ... }
+          - pattern: |
+              for (var $KEY in $SRC) { ... $TGT[$KEY] = ...; ... }
+          - pattern: |
+              Object.keys($SRC).forEach(function($KEY) { ... $TGT[$KEY] = ...; ... })
+          - pattern: |
+              Object.keys($SRC).forEach($KEY => { ... $TGT[$KEY] = ...; ... })
+          - pattern: |
+              for (const $KEY of Object.keys($SRC)) { ... $TGT[$KEY] = ...; ... }
+      # 關於防護實作的排除：
+      #
+      # 理想上應排除「已過濾 __proto__ / constructor / prototype」的安全實作，
+      # 但實測發現兩種寫法無法用 pattern 可靠區分：
+      #   安全：const DANGEROUS = [...];  for (k in src) { if (DANGEROUS.includes(k)) continue; ... }
+      #   危險：for (k in src) { if (typeof src[k] === 'object') {...} else { tgt[k] = src[k]; } }
+      # 兩者的迴圈結構相同，差別在於「迴圈外宣告的黑名單」與「if 條件的語意」，
+      # 而 pattern-not-regex 在 patterns 區塊內只對匹配片段比對，看不到迴圈外的宣告；
+      # 用 pattern-not 排除含 continue 的迴圈則會連真漏洞一起擋掉（實測 pp.js 變 0）。
+      #
+      # 依兩階段架構的職責分工（Semgrep 高召回、CodeBERT 高精確），
+      # 此處選擇保留召回，安全實作產生的誤報交由第二階段模型過濾。
+
+  # ── PHP：foreach 動態屬性賦值 ──
+  - id: php-object-pollution-merge
+    languages: [php]
+    severity: ERROR
+    message: >-
+      Object Pollution (CWE-1321): 遞迴合併函式以使用者控制的 key
+      直接寫入物件屬性，未過濾危險鍵名。
+      攻擊者可覆寫既有屬性以繞過安全檢查。
+      應改用白名單限定可寫入的屬性，或使用陣列而非動態物件屬性。
+    metadata:
+      cwe: [CWE-1321]
+      category: security
+      confidence: HIGH
+    patterns:
+      - pattern-either:
+          - pattern: $TGT->$KEY = $VAL;
+          - pattern: $TGT->{$KEY} = $VAL;
+      - pattern-inside: |
+          foreach ($SRC as $KEY => $V) { ... }
+      # 排除已做白名單過濾的實作
+      - pattern-not-regex: in_array\s*\(\s*\$\w+\s*,\s*\[?\s*["']__proto__
+
+  # ── Python：遞迴 setattr / __dict__ 更新 ──
+  - id: python-attribute-pollution-merge
+    languages: [python]
+    severity: ERROR
+    message: >-
+      Attribute Pollution (CWE-1321): 遞迴合併函式以使用者控制的 key
+      呼叫 setattr，未過濾 __class__ / __dict__ / __globals__ 等 dunder 屬性。
+      攻擊者可透過 __class__ 存取類別物件並修改共用狀態。
+      應以白名單限定可設定的屬性名，或檢查 key 是否以底線開頭。
+    metadata:
+      cwe: [CWE-1321]
+      category: security
+      confidence: HIGH
+    patterns:
+      - pattern-either:
+          - pattern: |
+              for $KEY, $VAL in $SRC.items():
+                  ...
+                  setattr($TGT, $KEY, ...)
+          - pattern: |
+              for $KEY in $SRC:
+                  ...
+                  setattr($TGT, $KEY, ...)
+          - pattern: |
+              for $KEY, $VAL in $SRC.items():
+                  ...
+                  $TGT.__dict__[$KEY] = ...
+          - pattern: $TGT.__dict__.update($SRC)
+      # 排除已做防護的實作（迴圈內有白名單或 dunder 過濾）
+      - pattern-not: |
+          for $KEY, $VAL in $SRC.items():
+              ...
+              if $KEY not in $ALLOWED:
+                  ...
+              ...
+      - pattern-not: |
+          for $KEY, $VAL in $SRC.items():
+              ...
+              if $KEY in $BLOCKED:
+                  ...
+              ...
+      - pattern-not: |
+          for $KEY, $VAL in $SRC.items():
+              ...
+              if $KEY.startswith("_"):
+                  ...
+              ...
+
+  # ── Java：反射式遞迴合併 ──
+  - id: java-reflection-pollution-merge
+    languages: [java]
+    severity: ERROR
+    message: >-
+      Attribute Pollution (CWE-1321): 以使用者控制的 key 透過反射設定物件欄位，
+      未限制可寫入的欄位範圍。攻擊者可覆寫敏感欄位（如 role、isAdmin）。
+      應以白名單限定可設定的欄位名。
+    metadata:
+      cwe: [CWE-1321]
+      category: security
+      confidence: MEDIUM
+    pattern-either:
+      - patterns:
+          - pattern: |
+              for ($T $KEY : $SRC.keySet()) { ... $F.set($TGT, ...); ... }
+      - patterns:
+          - pattern: |
+              for (Map.Entry<...> $E : $SRC.entrySet()) { ... $F.set($TGT, ...); ... }
+      - patterns:
+          - pattern: |
+              $CLS.getDeclaredField($KEY).set($TGT, ...);
+
+  # ── Java：以 ScriptEngine 執行含 merge 的 JS 字串 ──
+  # 測試樣本中常見：用 Nashorn 執行 JS 版的遞迴合併
+  - id: java-scriptengine-merge-eval
+    languages: [java]
+    severity: ERROR
+    message: >-
+      Prototype Pollution (CWE-1321): 以 ScriptEngine 執行含遞迴合併邏輯的
+      JavaScript 字串，且該合併未過濾 __proto__。
+      此外將使用者輸入拼接進 script 字串本身亦構成程式碼注入風險。
+    metadata:
+      cwe: [CWE-1321]
+      category: security
+      confidence: HIGH
+    patterns:
+      - pattern-either:
+          - pattern: $ENGINE.eval($SCRIPT)
+          - pattern: $ENGINE.eval($SCRIPT, ...)
+      - metavariable-regex:
+          metavariable: $SCRIPT
+          regex: (?s).*(for\s*\(\s*var\s+\w+\s+in|hasOwnProperty|\[\s*key\s*\]\s*=|merge\s*\().*

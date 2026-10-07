@@ -1,0 +1,663 @@
+rules:
+- id: ts-xss-cross-site-scripting-cwe79
+  pattern-either:
+  - pattern: $EL.innerHTML = $INPUT
+  - pattern: $EL.outerHTML = $INPUT
+  - pattern: document.write($INPUT)
+  - pattern: document.writeln($INPUT)
+  - pattern: eval($INPUT)
+  - pattern: location.href = $INPUT
+  - pattern: window.location = $INPUT
+  - pattern: '{ ..., dangerouslySetInnerHTML: $VAL, ... }'
+  - pattern: $RES.send(...)
+  - pattern: $RES.write(...)
+  message: 'Cross-Site Scripting (XSS) (CWE-79): Untrusted input is rendered directly
+    to the web page or output stream without proper escaping or sanitization. Use
+    DOMPurify, secure modern framework binding, or robust encoding libraries.'
+  languages:
+  - typescript
+  severity: ERROR
+  metadata:
+    cwe:
+    - CWE-79
+- id: ts-sqli-sql-injection-cwe89
+  pattern-either:
+  - pattern: $CLIENT.query($X + $INPUT, ...)
+  - pattern: $CLIENT.query(`...${$INPUT}...`, ...)
+  - pattern: $CONN.query($X + $INPUT, ...)
+  - pattern: $CONN.query(`...${$INPUT}...`, ...)
+  - pattern: $CONN.execute($X + $INPUT, ...)
+  - pattern: $CONN.execute(`...${$INPUT}...`, ...)
+  - pattern: $REPO.query($X + $INPUT)
+  - pattern: $REPO.query(`...${$INPUT}...`)
+  - pattern: $QB.where($X + $INPUT)
+  - pattern: $QB.where(`...${$INPUT}...`)
+  - pattern: $PRISMA.$queryRawUnsafe($X + $INPUT)
+  - pattern: $PRISMA.$queryRawUnsafe(`...${$INPUT}...`)
+  - pattern: "$SEQ.query($X + $INPUT, {\n  type: ...\n})\n"
+  - pattern: "$SEQ.query(`...${$INPUT}...`, {\n  type: ...\n})\n"
+  message: 'SQL Injection (CWE-89): Untrusted input is dynamically concatenated into
+    a SQL query string. Use parameterized queries, prepared statements, or safe ORM
+    mechanisms instead.'
+  languages:
+  - typescript
+  severity: ERROR
+  metadata:
+    cwe:
+    - CWE-89
+- id: ts-csrf-cross-site-request-forgery-cwe352
+  pattern-either:
+  - pattern: $APP.use(cookieParser(...))
+  - pattern: 'res.cookie($NAME, $VAL, { ..., sameSite: ''none'', ... })'
+  - pattern: 'res.cookie($NAME, $VAL, { ..., sameSite: ''none'', secure: false, ...
+      })'
+  - pattern: 'session({ ..., cookie: { ..., sameSite: false, ... }, ... })'
+  - pattern: 'session({ ..., cookie: { ..., sameSite: ''none'', ... }, ... })'
+  - pattern: $PROTECT.disableCsrf()
+  - pattern: 'csrf({ ..., ignoreMethods: $METHODS, ... })'
+  message: 'Cross-Site Request Forgery (CSRF) (CWE-352): The application configuration
+    lacks CSRF protection mechanisms or explicitly downgrades Cookie SameSite attributes,
+    allowing unauthorized commands to be transmitted from trusted users. Ensure proper
+    CSRF tokens or SameSite=Strict/Lax configurations are enforced.'
+  languages:
+  - typescript
+  severity: ERROR
+  metadata:
+    cwe:
+    - CWE-352
+- id: ts-missing-authorization-cwe862
+  pattern-either:
+  - pattern: "@Controller(...)\nclass $CLASS {\n  ...\n  @Delete(...)\n  $METHOD(...)\
+      \ { ... }\n}\n"
+  - pattern: "@Controller(...)\nclass $CLASS {\n  ...\n  @Put(...)\n  $METHOD(...)\
+      \ { ... }\n}\n"
+  - pattern: "$APP.delete($ROUTE, (req, res) => {\n  ...\n  $DB.deleteRecord(...);\n\
+      \  ...\n})\n"
+  - pattern: "@Resolver(...)\nclass $RESOLVER {\n  ...\n  @Mutation(...)\n  $MUTATION(...)\
+      \ { ... }\n}\n"
+  - pattern: "function executeAdminAction(...) {\n  ...\n  // 缺乏 checkPermission()\
+      \ 或 checkRole() 等呼叫\n  ...\n}\n"
+  message: 'Missing Authorization (CWE-862): The application endpoint or sensitive
+    business logic executes critical operations without checking the user''s roles
+    or permissions. Ensure proper Guards, Middleware, or authorization checks are
+    explicitly added.'
+  languages:
+  - typescript
+  severity: ERROR
+  metadata:
+    cwe:
+    - CWE-862
+- id: ts-path-traversal-cwe22
+  pattern-either:
+  - pattern: $FS.readFile($X + $INPUT, ...)
+  - pattern: $FS.readFile(`...${$INPUT}...`, ...)
+  - pattern: $FS.readFileSync($X + $INPUT, ...)
+  - pattern: $FS.readFileSync(`...${$INPUT}...`, ...)
+  - pattern: $FS.writeFile($X + $INPUT, ...)
+  - pattern: $FS.writeFileSync($X + $INPUT, ...)
+  - pattern: $FS.createReadStream($X + $INPUT, ...)
+  - pattern: $FS.createWriteStream($X + $INPUT, ...)
+  - pattern: $FSP.readFile($X + $INPUT, ...)
+  - pattern: $FSP.writeFile($X + $INPUT, ...)
+  - pattern: path.join($DIR, $INPUT)
+  - pattern: path.resolve($DIR, $INPUT)
+  message: 'Path Traversal (CWE-22): Untrusted input is dynamically concatenated into
+    a file system path. This allows attackers to bypass intended access controls and
+    read/write arbitrary files via relative path sequences (e.g., ''../../''). Use
+    path.basename(), sanizitation libraries, or strictly validate that the resolved
+    path resides within the intended base directory.'
+  languages:
+  - typescript
+  severity: ERROR
+  metadata:
+    cwe:
+    - CWE-22
+- id: ts-command-injection-cwe78
+  pattern-either:
+  - pattern: child_process.exec($X + $INPUT, ...)
+  - pattern: child_process.exec(`...${$INPUT}...`, ...)
+  - pattern: exec($X + $INPUT, ...)
+  - pattern: exec(`...${$INPUT}...`, ...)
+  - pattern: child_process.execSync($X + $INPUT, ...)
+  - pattern: child_process.execSync(`...${$INPUT}...`, ...)
+  - pattern: execSync($X + $INPUT, ...)
+  - pattern: execSync(`...${$INPUT}...`, ...)
+  - pattern: $EXEC_PROM($X + $INPUT, ...)
+  - pattern: $EXEC_PROM(`...${$INPUT}...`, ...)
+  - pattern: 'child_process.spawn($X + $INPUT, ..., { ..., shell: true, ... })'
+  - pattern: 'child_process.spawn(`...${$INPUT}...`, ..., { ..., shell: true, ...
+      })'
+  - pattern: 'spawn($X + $INPUT, ..., { ..., shell: true, ... })'
+  - pattern: 'spawn(`...${$INPUT}...`, ..., { ..., shell: true, ... })'
+  message: 'OS Command Injection (CWE-78): Untrusted input is dynamically concatenated
+    into an OS command execution function. This allows attackers to execute arbitrary
+    shell commands with the privileges of the Node.js process. Avoid using exec/shell:true
+    with concatenation; instead, use child_process.spawn or child_process.execFile
+    with arguments passed as an array of strings.'
+  languages:
+  - typescript
+  severity: ERROR
+  metadata:
+    cwe:
+    - CWE-78
+- id: ts-code-injection-cwe94
+  pattern-either:
+  - pattern: eval($X + $INPUT)
+  - pattern: eval(`...${$INPUT}...`)
+  - pattern: new Function($X + $INPUT, ...)
+  - pattern: new Function(..., $X + $INPUT)
+  - pattern: new Function(`...${$INPUT}...`, ...)
+  - pattern: new Function(..., `...${$INPUT}...`)
+  - pattern: Function($X + $INPUT, ...)
+  - pattern: Function(..., `...${$INPUT}...`)
+  - pattern: $VM.runInContext($X + $INPUT, ...)
+  - pattern: $VM.runInContext(`...${$INPUT}...`, ...)
+  - pattern: $VM.runInNewContext($X + $INPUT, ...)
+  - pattern: $VM.runInNewContext(`...${$INPUT}...`, ...)
+  - pattern: $VM.runInThisContext($X + $INPUT, ...)
+  - pattern: $VM.runInThisContext(`...${$INPUT}...`, ...)
+  - pattern: new $VM.Script($X + $INPUT, ...)
+  - pattern: new $VM.Script(`...${$INPUT}...`, ...)
+  message: 'Improper Control of Generation of Code / Code Injection (CWE-94): Passing
+    untrusted input into eval(), new Function(), or the ''vm'' module allows attackers
+    to execute arbitrary JavaScript/TypeScript code within the process context. Never
+    pass user-controlled strings to these code-generation functions. Use safe alternatives
+    such as JSON.parse() or a strict whitelist.'
+  languages:
+  - typescript
+  severity: ERROR
+  metadata:
+    cwe:
+    - CWE-94
+- id: ts-unrestricted-file-upload-cwe434
+  pattern-either:
+  - pattern: 'filename: (req, file, cb) => { ..., cb(null, file.originalname); }'
+  - pattern: 'filename: function(req, file, cb) { ..., cb(null, file.originalname);
+      }'
+  - pattern: $FS.writeFile(..., $PATH + $REQ.file.originalname, ...)
+  - pattern: $FS.writeFileSync(..., $PATH + $REQ.file.originalname, ...)
+  - pattern: $FS.createWriteStream(..., $PATH + $REQ.file.originalname, ...)
+  - pattern: "@Post(...)\n@UseInterceptors(FileInterceptor(...))\n$METHOD(@UploadedFile()\
+      \ $FILE, ...) {\n  ...\n  $FS.writeFileSync(..., $FILE.originalname);\n  ...\n\
+      }\n"
+  message: 'Unrestricted Upload of File with Dangerous Type (CWE-434): The application
+    allows users to upload files and retains their original extensions or names without
+    strict server-side validation against a whitelist. This could enable an attacker
+    to upload dangerous scripts (e.g., .js, .ts, .html) and execute them on the server
+    or via clients'' browsers. Always generate randomized file names, use standard
+    mime-type checking, and validate file extensions strictly on the server side.'
+  languages:
+  - typescript
+  severity: ERROR
+  metadata:
+    cwe:
+    - CWE-434
+- id: ts-null-pointer-dereference-cwe476
+  pattern-either:
+  - pattern: $X!. $PROP
+  - pattern: $X!. $METHOD(...)
+  - pattern: $ARR.find(...).$PROP
+  - pattern: $ARR.find(...).$METHOD(...)
+  - pattern: $MAP.get(...).$PROP
+  - pattern: $MAP.get(...).$METHOD(...)
+  - pattern: 'function $FN(...): $TYPE | null { ... }
+
+      ...
+
+      $FN(...).$PROP
+
+      '
+  - pattern: 'function $FN(...): $TYPE | undefined { ... }
+
+      ...
+
+      $FN(...).$PROP
+
+      '
+  message: 'Null Pointer Dereference (CWE-476): The application attempts to dereference
+    an object that can be null or undefined. Overusing the non-null assertion operator
+    (!.) or bypassing checks on Array.find() / Map.get() outputs can lead to runtime
+    TypeErrors and application crashes. Use optional chaining (?.) or explicit conditional
+    checks instead.'
+  languages:
+  - typescript
+  severity: ERROR
+  metadata:
+    cwe:
+    - CWE-476
+- id: ts-untrusted-deserialization-cwe502
+  pattern-either:
+  - pattern: nodeSerialize.unserialize($INPUT, ...)
+  - pattern: unserialize($INPUT, ...)
+  - pattern: yaml.load($INPUT, ...)
+  - pattern: yaml.unsafeLoad($INPUT, ...)
+  - pattern: load($INPUT, ...)
+  - pattern: eval('(' + $INPUT + ')')
+  - pattern: eval(`(${$INPUT})`)
+  message: 'Deserialization of Untrusted Data (CWE-502): Passing untrusted input to
+    an unsafe deserialization function (like node-serialize.unserialize or unsafe
+    YAML loaders) allows attackers to inject malicious objects and achieve Remote
+    Code Execution (RCE). Use secure alternatives like JSON.parse() or configure strict,
+    data-only schemas.'
+  languages:
+  - typescript
+  severity: ERROR
+  metadata:
+    cwe:
+    - CWE-502
+- id: ts-incorrect-authorization-cwe863
+  pattern-either:
+  - pattern: '$MODEL.findOne({ id: $REQ.params.id })'
+  - pattern: '$MODEL.updateOne({ id: $REQ.params.id }, ...)'
+  - pattern: $MODEL.findByIdAndUpdate($REQ.body.id, ...)
+  - pattern: 'const $DATA = await $MODEL.findOne(...);
+
+      ...
+
+      // 漏洞特徵：直接執行敏感操作，中途完全沒有檢查 $DATA.ownerId === $REQ.user.id
+
+      await $MODEL.deleteOne(...);
+
+      '
+  - pattern: "@Delete(...)\n$METHOD(...) {\n  ...\n}\n"
+  message: 'Incorrect Authorization (CWE-863): The application performs an authorization
+    check, but it does not correctly ensure that the logged-in user possesses the
+    required privileges or ownership to access the requested resource. This often
+    leads to Insecure Direct Object Reference (IDOR) vulnerabilities. Always validate
+    that ''resource.ownerId === req.user.id'' or enforce strict role-based access
+    controls.'
+  languages:
+  - typescript
+  severity: ERROR
+  metadata:
+    cwe:
+    - CWE-863
+- id: ts-improper-input-validation-cwe20
+  pattern-either:
+  - pattern: '$VAR = $REQ.body;
+
+      ...
+
+      $OBJ[$VAR]
+
+      '
+  - pattern: '$VAR = $REQ.query;
+
+      ...
+
+      $OBJ[$VAR]
+
+      '
+  - pattern: new RegExp($X + $INPUT)
+  - pattern: new RegExp(`...${$INPUT}...`)
+  - pattern: new RegExp($INPUT)
+  - pattern: res.redirect($REQ.query.$PARAM)
+  - pattern: res.redirect($REQ.body.$PARAM)
+  message: 'Improper Input Validation (CWE-20): The application receives untrusted
+    input and uses it without prior validation, or uses a flawed regex validation
+    pattern that can be bypassed. This can lead to open redirection, Prototype Pollution,
+    or parameter injection. Always validate inputs using schema libraries like Zod
+    or ensure rigorous boundary/format constraints.'
+  languages:
+  - typescript
+  severity: ERROR
+  metadata:
+    cwe:
+    - CWE-20
+- id: ts-improper-access-control-cwe284
+  pattern-either:
+  - pattern: 'cors({ origin: ''*'' })'
+  - pattern: 'cors({ origin: true })'
+  - pattern: res.setHeader('Access-Control-Allow-Origin', '*')
+  - pattern: app.get('/admin/...', $METHOD)
+  - pattern: router.post('/config/...', $METHOD)
+  - pattern: "@Controller('admin')\nclass $CLASS {\n  ...\n}\n"
+  message: 'Improper Access Control (CWE-284): The application fails to restrict access
+    to sensitive resources or endpoints properly. Setting CORS origins to ''*'' or
+    allowing wildcard API routes without authentication/authorization layers exposes
+    internal services to unauthorized cross-origin or external access. Always enforce
+    explicit Guard/Middleware chains and limit CORS scopes.'
+  languages:
+  - typescript
+  severity: ERROR
+  metadata:
+    cwe:
+    - CWE-284
+- id: ts-sensitive-information-exposure-cwe200
+  pattern-either:
+  - pattern: res.send($ERR.stack)
+  - pattern: 'res.json({ ..., error: $ERR, ... })'
+  - pattern: res.status(...).send($ERR)
+  - pattern: 'res.json({ ..., password: $PASS, ... })'
+  - pattern: 'res.send({ ..., secret: $SEC, ... })'
+  - pattern: console.log(process.env)
+  - pattern: res.send(process.env)
+  message: 'Exposure of Sensitive Information to an Unauthorized Actor (CWE-200):
+    The application leaks sensitive data (such as raw error stacks, environment variables,
+    or password fields) in HTTP responses or verbose logs. This information can assist
+    attackers in mapping the internal infrastructure or bypassing access controls.
+    Sanitize all output data and use explicit view models or validation schemas.'
+  languages:
+  - typescript
+  severity: ERROR
+  metadata:
+    cwe:
+    - CWE-200
+- id: ts-missing-authentication-cwe306
+  pattern-either:
+  - pattern: app.post('/api/checkout', $METHOD)
+  - pattern: router.post('/user/change-password', $METHOD)
+  - pattern: app.put('/api/payment/...', $METHOD)
+  - pattern: "@Post($PATH)\n$METHOD(...) {\n  ...\n  $X.changePassword(...);\n  ...\n\
+      }\n"
+  - pattern: "@Post($PATH)\n$METHOD(...) {\n  ...\n  $X.processPayment(...);\n  ...\n\
+      }\n"
+  message: 'Missing Authentication for Critical Function (CWE-306): The application
+    executes a critical function (such as changing passwords, processing payments,
+    or checking out) without verifying the identity of the actor. Ensure that appropriate
+    authentication middleware (e.g., passport.authenticate()) or NestJS AuthGuards
+    are strictly enforced on these endpoints.'
+  languages:
+  - typescript
+  severity: ERROR
+  metadata:
+    cwe:
+    - CWE-306
+- id: ts-ssrf-untrusted-request-cwe918
+  pattern-either:
+  - pattern: axios.get($X + $INPUT, ...)
+  - pattern: axios.get(`...${$INPUT}...`, ...)
+  - pattern: axios.post($X + $INPUT, ...)
+  - pattern: axios.post(`...${$INPUT}...`, ...)
+  - pattern: axios($X + $INPUT, ...)
+  - pattern: axios(`...${$INPUT}...`, ...)
+  - pattern: 'axios.request({ ..., url: $X + $INPUT, ... })'
+  - pattern: 'axios.request({ ..., url: `...${$INPUT}...`, ... })'
+  - pattern: fetch($X + $INPUT, ...)
+  - pattern: fetch(`...${$INPUT}...`, ...)
+  message: 'Server-Side Request Forgery (SSRF) (CWE-918): The application constructs
+    a server-side HTTP request URL by concatenating untrusted user input directly.
+    This allows external attackers to force the server to make unauthorized requests
+    to internal resources, private networks, or cloud metadata endpoints (e.g., 169.254.169.254).
+    Always validate inputs against a strict whitelist of allowed domains or use explicit
+    URL parsing to restrict destinations.'
+  languages:
+  - typescript
+  severity: ERROR
+  metadata:
+    cwe:
+    - CWE-918
+- id: ts-command-injection-child-process-cwe77
+  pattern-either:
+  - pattern: child_process.exec($X + $INPUT, ...)
+  - pattern: child_process.exec(`...${$INPUT}...`, ...)
+  - pattern: exec($X + $INPUT, ...)
+  - pattern: exec(`...${$INPUT}...`, ...)
+  - pattern: child_process.execSync($X + $INPUT, ...)
+  - pattern: child_process.execSync(`...${$INPUT}...`, ...)
+  - pattern: execSync($X + $INPUT, ...)
+  - pattern: execSync(`...${$INPUT}...`, ...)
+  - pattern: 'child_process.spawn($CMD + $INPUT, ..., {..., shell: true, ...})'
+  - pattern: 'child_process.spawn(`...${$INPUT}...`, ..., {..., shell: true, ...})'
+  - pattern: 'spawn($CMD + $INPUT, ..., {..., shell: true, ...})'
+  - pattern: 'spawn(`...${$INPUT}...`, ..., {..., shell: true, ...})'
+  message: 'Improper Neutralization of Special Elements used in a Command (''Command
+    Injection'') (CWE-77): The application constructs an OS command by directly concatenating
+    untrusted user input into child_process.exec or shell-enabled spawn functions.
+    This allows malicious actors to execute arbitrary system commands with the privileges
+    of the Node.js process. Always pass arguments as an array using safe APIs like
+    child_process.execFile or child_process.spawn with shell: false.'
+  languages:
+  - typescript
+  severity: ERROR
+  metadata:
+    cwe:
+    - CWE-77
+- id: ts-idor-user-controlled-key-cwe639
+  pattern-either:
+  - pattern: '$REPO.findOne({ where: { id: $REQ.params.$KEY } })'
+  - pattern: '$REPO.find({ accountNumber: $REQ.body.$KEY })'
+  - pattern: $MODEL.findById($REQ.query.$KEY)
+  - pattern: '$MODEL.destroy({ where: { id: $REQ.params.$KEY } })'
+  - pattern: '$MODEL.findOneAndUpdate({ _id: $REQ.body.$KEY }, ...)'
+  message: 'Authorization Bypass Through User-Controlled Key (CWE-639): The application
+    uses an actor-controlled key to access a resource without verifying that the actor
+    has permission to access that specific resource. This leads to Insecure Direct
+    Object Reference (IDOR). Always chain the user identity identifier (e.g., req.user.id)
+    to the query filter or perform explicit authorization mapping.'
+  languages:
+  - typescript
+  severity: ERROR
+  metadata:
+    cwe:
+    - CWE-639
+- id: ts-uncontrolled-resource-allocation-cwe770
+  pattern-either:
+  - pattern: Buffer.alloc($REQ.body.$PARAM)
+  - pattern: Buffer.alloc($REQ.query.$PARAM)
+  - pattern: new Array($REQ.body.$PARAM)
+  - pattern: app.post('/api/login', $METHOD)
+  - pattern: router.post('/api/sms/send', $METHOD)
+  - pattern: setTimeout($FN, $REQ.body.$PARAM)
+  - pattern: setInterval($FN, $REQ.query.$PARAM)
+  message: 'Allocation of Resources Without Limits or Throttling (CWE-770): The application
+    allocates memory, limits timers, or exposes high-cost API endpoints without proper
+    restriction or throttling. Attackers can leverage this to exhaust system memory
+    (OOM) or flood services, leading to Denial of Service (DoS). Always enforce explicit
+    maximum boundary checks on allocations and integrate rate-limiting middleware.'
+  languages:
+  - typescript
+  severity: ERROR
+  metadata:
+    cwe:
+    - CWE-770
+- id: ts-improper-authentication-cwe287
+  pattern-either:
+  - pattern: if ($SECRET == $INPUT) { ... }
+  - pattern: if ($SECRET != $INPUT) { ... }
+  - pattern: "if (!$REQ.headers.$AUTH) {\n  $RES.status(401);\n  next();\n}\n"
+  - pattern: "if (!$REQ.headers.$AUTH) {\n  $RES.sendStatus(401);\n  next();\n}\n"
+  - pattern: 'jwt.verify($TOKEN, $KEY, { algorithms: [..., ''none'', ...] })'
+  - pattern: jwt.decode($TOKEN)
+  message: 'Improper Authentication (CWE-287): The application fails to perform proper
+    authentication before performing a restricted action. This can stem from weak
+    type comparison during credentials check, missing early return statements in auth
+    middleware leading to execution bypass, or using unsafe JWT configurations like
+    decoding without verification or allowing the ''none'' algorithm.'
+  languages:
+  - typescript
+  severity: ERROR
+  metadata:
+    cwe:
+    - CWE-287
+- id: ts-improper-privilege-management-cwe269
+  pattern-either:
+  - pattern: process.setuid($REQ.body.$PARAM)
+  - pattern: process.setuid($REQ.query.$PARAM)
+  - pattern: process.setgid($REQ.body.$PARAM)
+  - pattern: Object.assign($USER, $REQ.body)
+  - pattern: $MODEL.update($REQ.body, ...)
+  - pattern: $MODEL.findByIdAndUpdate(..., $REQ.body, ...)
+  - pattern: $USER.isAdmin = $REQ.body.$PARAM
+  - pattern: $USER.role = $REQ.body.$PARAM
+  message: 'Improper Privilege Management (CWE-269): The application improperly manages
+    privileges, allowing untrusted inputs to control system-level identities (setuid),
+    causing Mass Assignment vulnerabilities where users can elevate their own roles
+    (e.g., overriding ''role'' or ''isAdmin''), or directly assigning unvalidated
+    roles. Always strictly sanitize input data against a strict whitelist before object
+    assignment or database entry.'
+  languages:
+  - typescript
+  severity: ERROR
+  metadata:
+    cwe:
+    - CWE-269
+- id: ts-hardcoded-credentials-cwe798
+  pattern-either:
+  - pattern: const $PASS = "...";
+  - pattern: let $SECRET = "...";
+  - pattern: var $KEY = "...";
+  - pattern: jwt.verify($T, "...", ...)
+  - pattern: 'new DataSource({ ..., password: "...", ... })'
+  - pattern: 'createConnection({ ..., password: "...", ... })'
+  - pattern: 'const $CONF = { ..., secret: "...", ... };'
+  - pattern: 'const $CONF = { ..., password: "...", ... };'
+  message: 'Use of Hard-coded Credentials (CWE-798): The application uses a hard-coded
+    credential, such as a password, an encryption key, or an API secret. This makes
+    it easy for attackers to compromise the system if they gain access to the source
+    code. Always transfer credentials into external environment variables (process.env)
+    or a secure secrets manager.'
+  languages:
+  - typescript
+  severity: ERROR
+  metadata:
+    cwe:
+    - CWE-798
+- id: ts-integer-overflow-typedarray-cwe190
+  pattern-either:
+  - pattern: new Uint8Array($REQ.body.$PARAM + $X)
+  - pattern: new Int32Array($REQ.query.$PARAM * $X)
+  - pattern: $TYPED_ARRAY[$INDEX] = $REQ.body.$PARAM + $X
+  - pattern: Buffer.alloc($REQ.body.$PARAM + $X)
+  - pattern: $BUF.write($STR, $REQ.query.$OFFSET + $X)
+  - pattern: 'let $AMOUNT = $REQ.body.$PARAM;
+
+      ...
+
+      $AMOUNT += $X; // 缺乏邊界檢查的累加
+
+      '
+  message: 'Integer Overflow or Wraparound (CWE-190): The application performs arithmetic
+    operations on untrusted inputs before allocating memory buffers, slicing arrays,
+    or assigning values to strict container types like TypedArrays (e.g., Uint8Array).
+    While native TypeScript numbers are float64 and lose precision rather than wrap
+    around, underlying TypedArrays and Buffer boundaries will suffer wrap-around truncation
+    or cause logical bypasses. Always validate inputs against ''Number.MAX_SAFE_INTEGER''
+    and enforce maximum boundary checks.'
+  languages:
+  - typescript
+  severity: ERROR
+  metadata:
+    cwe:
+    - CWE-190
+- id: ts-uncontrolled-resource-consumption-cwe400
+  pattern-either:
+  - pattern: new RegExp($REQ.query.$PARAM, ...)
+  - pattern: new RegExp($REQ.body.$PARAM, ...)
+  - pattern: $STR.match($REQ.body.$PARAM)
+  - pattern: $STR.search($REQ.query.$PARAM)
+  - pattern: "for (let $I = 0; $I < $REQ.body.$PARAM; $I++) {\n  ...\n}\n"
+  - pattern: "while ($X < $REQ.query.$PARAM) {\n  ...\n  $X++;\n}\n"
+  message: 'Uncontrolled Resource Consumption (CWE-400): The application does not
+    properly control the consumption of CPU or execution time. Compiling dynamic text
+    into RegExp without sanitization leads to Regular Expression Denial of Service
+    (ReDoS). Running loops directly bounded by client inputs without a maximum limit
+    blocks the single-threaded event loop. Always validate and enforce strict maximum
+    thresholds.'
+  languages:
+  - typescript
+  severity: ERROR
+  metadata:
+    cwe:
+    - CWE-400
+- id: ts-hidden-functionality-backdoor-cwe912
+  pattern-either:
+  - pattern: if ($REQ.headers.$HEADER) { eval($REQ.headers.$HEADER); }
+  - pattern: if ($REQ.query.$PARAM) { exec($REQ.query.$PARAM, ...); }
+  - pattern: if ($INPUT === "...") { return true; }
+  - pattern: if ($USER === "...") { $SESSION.isAdmin = true; }
+  - pattern: if (new Date().getFullYear() === $YEAR) { ... }
+  - pattern: if (Date.now() > $TIMESTAMP) { ... }
+  message: 'Hidden Functionality / Backdoor (CWE-912): The application contains hidden
+    functionality, hard-coded super-user bypass mechanisms, or logic bombs that execute
+    restricted code based on undocumented trigger inputs (e.g., custom headers, magic
+    strings, or specific timestamps). This poses an extreme risk of full system compromise.
+    Audit all short-circuit logic and restrict dynamic execution APIs.'
+  languages:
+  - typescript
+  severity: ERROR
+  metadata:
+    cwe:
+    - CWE-912
+- id: ts-untrusted-module-inclusion-cwe829
+  pattern-either:
+  - pattern: axios.get("http://...")
+  - pattern: fetch("http://...")
+  - pattern: require($REQ.body.$PARAM)
+  - pattern: require($REQ.query.$PARAM)
+  - pattern: import($REQ.body.$PARAM)
+  - pattern: require("/tmp/...")
+  - pattern: import("/tmp/...")
+  message: 'Inclusion of Functionality from Untrusted Control Sphere (CWE-829): The
+    application imports or executes code from an untrusted sphere, such as plain HTTP
+    remote sources, fully user-controlled dynamic module paths, or shared temporary
+    directories (/tmp). This can lead to Remote Code Execution (RCE) or malicious
+    dependency hijacking. Ensure all imported code comes from trusted, verified, and
+    immutable repositories, and validate dynamic paths against a strict whitelist.'
+  languages:
+  - typescript
+  severity: ERROR
+  metadata:
+    cwe:
+    - CWE-829
+- id: ts-prototype-pollution-cwe1321
+  pattern-either:
+  - pattern: $OBJ[$KEY] = $VALUE
+  - pattern: $OBJ[$KEY][$SUBKEY] = $VALUE
+  - pattern: "for (let $K in $SRC) {\n  ...\n  $TARGET[$K] = $SRC[$K];\n}\n"
+  - pattern: "for (let $K of Object.keys($SRC)) {\n  ...\n  $TARGET[$K] = $SRC[$K];\n\
+      }\n"
+  message: 'Improperly Controlled Modification of Object Prototype Attributes (''Prototype
+    Pollution'') (CWE-1321): The application recursively merges or assigns properties
+    to an object using untrusted keys without filtering dangerous attributes such
+    as ''__proto__'' or ''constructor.prototype''. This allows attackers to inject
+    arbitrary properties into the global Object.prototype, leading to denial of service,
+    authorization bypass, or remote code execution. Always implement a strict blocklist
+    for dangerous keys or use Object.create(null) for data-holding dictionaries.'
+  languages:
+  - typescript
+  severity: ERROR
+  metadata:
+    cwe:
+    - CWE-1321
+- id: ts-improper-certificate-verification-cwe295
+  pattern-either:
+  - pattern: process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0'
+  - pattern: process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0"
+  - pattern: 'new https.Agent({ ..., rejectUnauthorized: false, ... })'
+  - pattern: 'tls.connect({ ..., rejectUnauthorized: false, ... }, ...)'
+  - pattern: 'axios.get($URL, { ..., rejectUnauthorized: false, ... })'
+  - pattern: 'axios.post($URL, $DATA, { ..., rejectUnauthorized: false, ... })'
+  message: 'Improper Certificate Verification (CWE-295): The application explicitly
+    disables TLS/SSL certificate verification by setting ''rejectUnauthorized: false''
+    or ''NODE_TLS_REJECT_UNAUTHORIZED = 0''. This makes the application highly vulnerable
+    to Man-in-the-Middle (MITM) attacks, allowing attackers to intercept or modify
+    encrypted traffic. Never disable certificate validation in production.'
+  languages:
+  - typescript
+  severity: ERROR
+  metadata:
+    cwe:
+    - CWE-295
+- id: ts-weak-hash-algorithm-cwe328
+  pattern-either:
+  - pattern: crypto.createHash('md5')
+  - pattern: crypto.createHash("md5")
+  - pattern: crypto.createHash('sha1')
+  - pattern: crypto.createHash("sha1")
+  - pattern: crypto.createHmac('md5', ...)
+  - pattern: crypto.createHmac("md5", ...)
+  - pattern: crypto.createHmac('sha1', ...)
+  - pattern: crypto.createHmac("sha1", ...)
+  message: 'Use of Weak Hash (CWE-328): The application uses a weak or broken cryptographic
+    hash algorithm (such as MD5 or SHA-1) which is vulnerable to collision attacks.
+    Do not use MD5 or SHA-1 for security-sensitive contexts like password hashing,
+    digital signatures, or integrity checks. Upgrade to secure alternatives like SHA-256
+    (crypto.createHash(''sha256'')) or memory-hard functions like Argon2 / bcrypt
+    for passwords.'
+  languages:
+  - typescript
+  severity: ERROR
+  metadata:
+    cwe:
+    - CWE-328

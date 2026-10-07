@@ -1,0 +1,1138 @@
+rules:
+  - id: c-xss-cross-site-scripting-cwe79
+    pattern-either:
+      # Pattern 1: 動態記憶體與不安全拷貝/寫入函式 (直接將外部輸入透過字串格式化輸出到 HTTP 回應流)
+      - pattern: "printf($FORMAT, $REQ.get_string(...))"
+      - pattern: "sprintf($BUF, $FORMAT, $REQ.get_string(...))"
+
+      # Pattern 2: C++ 標準流不安全讀入到堆積指標 (此處指 C 語言標準檔案或網路 Socket 串流不安全寫入外部輸入)
+      - pattern: "fprintf($STREAM, $FORMAT, $INPUT_VAR)"
+      - pattern: "fputs($INPUT_VAR, $STREAM)"
+
+      # Pattern 3: 邊界寫入錯誤 (使用標準 C 字串操作，直接拼接未過濾的外部輸入到 HTML 緩衝區中)
+      - pattern: "strcpy($HTML_BUF, $REQ.get_string(...))"
+      - pattern: "strcat($HTML_BUF, $REQ.get_string(...))"
+
+      # Pattern 4: 智慧指標或容器的底層資料指標被誤用 (此處指自訂的網頁伺服器回應元件直接發送未校驗的字串)
+      - pattern: "$HTTP_RESP.send_html_body($REQ.get_string(...))"
+
+    message: "Improper Neutralization of Input During Web Page Generation ('Cross-site Scripting') (CWE-79): The product does not neutralize or incorrectly neutralizes user-controllable input before it is placed in output that is used as a web page that is served to other users."
+    languages: [c]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-79']
+
+  - id: c-sql-injection-cwe89
+    pattern-either:
+      # Pattern 1: 直接將外部輸入透過字串格式化拼接成 SQL 敘述，並傳入常見的資料庫執行函式
+      - pattern: |
+          sprintf($SQL_BUF, $FORMAT, ..., $REQ.get_string(...), ...);
+          ...
+          mysql_query($CONN, $SQL_BUF);
+      - pattern: |
+          snprintf($SQL_BUF, $LEN, $FORMAT, ..., $REQ.get_string(...), ...);
+          ...
+          sqlite3_exec($DB, $SQL_BUF, ...);
+
+      # Pattern 2: 傳統字串複製與拼接（strcpy/strcat）將外部輸入組裝進基底 SQL 字串中
+      - pattern: |
+          strcpy($SQL_BUF, "SELECT ...");
+          ...
+          strcat($SQL_BUF, $INPUT_VAR);
+          ...
+          mysql_real_query($CONN, $SQL_BUF, ...);
+
+      # Pattern 3: 使用標準格式化輸出（fprintf）將未經過濾的 SQL 指令直接推入資料庫串流或批次檔
+      - pattern: "fprintf($DB_STREAM, $FORMAT, $REQ.get_string(...))"
+
+      # Pattern 4: 自訂的資料庫封裝元件，直接接收外部輸入進行非參數化的動態查詢
+      - pattern: "$DB_CLIENT.execute_query($REQ.get_string(...))"
+
+    message: "Improper Neutralization of Special Elements used in an SQL Command ('SQL Injection') (CWE-89): The product constructs all or part of an SQL command using externally-influenced input from an upstream component, but it does not neutralize or incorrectly neutralizes special elements that could modify the intended SQL command when it is sent to a downstream component."
+    languages: [c]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-89']
+
+  - id: c-csrf-vulnerability-cwe352
+    pattern-either:
+      # Pattern 1: 處理敏感操作（如 POST 請求修改配置），卻完全沒有檢查 CSRF Token
+      - pattern: |
+          if (strcmp($REQ.method, "POST") == 0) {
+              ...
+              $REQ.get_param("action");
+              ...
+              update_system_config(...);
+          }
+
+      # Pattern 2: 自訂的 Session 機制在設定驗證 Cookie 時，漏掉了防範 CSRF 的 SameSite 屬性
+      - pattern: |
+          sprintf($COOKIE, "Set-Cookie: session_id=%s; HttpOnly; Secure", $SID);
+          ...
+          http_send_header($REQ, $COOKIE);
+
+      # Pattern 3: CGI 程式直接讀取環境變數中的 Cookie 進行敏感操作，而沒有驗證額外的防偽標記
+      - pattern: |
+          $COOKIE = getenv("HTTP_COOKIE");
+          ...
+          if ($COOKIE != NULL && strstr($COOKIE, "auth=true")) {
+              ...
+              system("reboot");
+          }
+
+    message: "Cross-Site Request Forgery (CSRF) (CWE-352): The web application developed in C does not, or incorrectly, neutralizes special elements to verify whether the request was intentionally sent by the user. Ensure CSRF tokens are validated for state-changing requests or SameSite attributes are explicitly configured on cookies."
+    languages: [c]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-352']
+
+  - id: c-missing-authorization-cwe862
+    pattern-either:
+      # Pattern 1: Web 核心或 CGI 程式在執行敏感的系統修改前（如重置系統），完全沒驗證使用者角色層級
+      - pattern: |
+          if (strcmp($REQ.action, "factory_reset") == 0) {
+              ...
+              do_factory_reset(...);
+          }
+
+      # Pattern 2: API 接口只驗證了 session 是否有效（不為空），卻直接允許存取特定的敏感檔案或物件（強迫瀏覽缺陷）
+      - pattern: |
+          if ($SESSION != NULL) {
+              ...
+              $FILE_PATH = $REQ.get_param("file_path");
+              ...
+              read_private_file($FILE_PATH);
+          }
+
+      # Pattern 3: 底層特權函式或系統呼叫（如修改 IP 設定）直接執行，前方完全沒有授權與角色過濾（如 check_admin_privilege）
+      - pattern: |
+          void $FUNCNAME(...) {
+              ...
+              if (strcmp($PARAM, "set_ip") == 0) {
+                  ...
+                  system($CMD);
+              }
+          }
+
+    message: "Missing Authorization (CWE-862): The product does not perform an authorization check when an actor attempts to access a resource or perform an action. Ensure user roles, capability flags, or ACLs are verified before processing privileged commands or accessing restricted files."
+    languages: [c]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-862']
+
+  - id: c-out-of-bounds-write-cwe787
+    pattern-either:
+      # Pattern 1: 傳統不安全的字串拷貝，目標緩衝區大小固定，卻直接寫入長度未知的外部變數
+      - pattern: |
+          char $BUF[$SIZE];
+          ...
+          strcpy($BUF, $INPUT);
+      - pattern: |
+          char $BUF[$SIZE];
+          ...
+          sprintf($BUF, "%s", $INPUT);
+
+      # Pattern 2: 堆積記憶體分配後，因迴圈邊界或長度計算錯誤（Off-by-one）導致在邊界外進行寫入
+      - pattern: |
+          $PTR = ($TYPE *)malloc($SIZE);
+          ...
+          for (int $I = 0; $I <= $SIZE; $I++) {
+              $PTR[$I] = $VAL;
+          }
+
+      # Pattern 3: 直接使用外部傳入、且未經過邊界檢查的整數作為陣列索引進行動態寫入
+      - pattern: |
+          int $IDX = $REQ.get_int(...);
+          ...
+          $ARR[$IDX] = $DATA;
+
+    message: "Out-of-bounds Write (CWE-787): The software writes data past the end, or before the beginning, of the intended buffer. This can result in corruption of data, a crash, or code execution. Ensure proper boundary checks before modifying memory arrays or utilizing functions like strcpy/sprintf."
+    languages: [c]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-787']
+
+  - id: c-path-traversal-cwe22
+    pattern-either:
+      # Pattern 1: 使用 sprintf / snprintf 將外部輸入直接拼接到目錄路徑後方，隨即用 fopen 開啟
+      - pattern: |
+          sprintf($PATH_BUF, "/var/www/html/%s", $REQ.get_string(...));
+          ...
+          fopen($PATH_BUF, $MODE);
+      - pattern: |
+          snprintf($PATH_BUF, $LEN, "%s/%s", $BASE_DIR, $REQ.get_string(...));
+          ...
+          fopen($PATH_BUF, $MODE);
+
+      # Pattern 2: 使用傳統 strcpy / strcat 將未經過濾的外部輸入串接到路徑緩衝區，並使用底層 open 系統呼叫
+      - pattern: |
+          strcpy($PATH_BUF, "/mnt/usb/");
+          ...
+          strcat($PATH_BUF, $INPUT_VAR);
+          ...
+          open($PATH_BUF, $FLAGS);
+
+      # Pattern 3: 直接將外部輸入作為檔案路徑傳入敏感的系統操作函式（如刪除檔案 remove、unlink）
+      - pattern: |
+          $INPUT = $REQ.get_string(...);
+          ...
+          remove($INPUT);
+
+    message: "Path Traversal (CWE-22): The software uses external input to construct a pathname that should be within a restricted directory, but it does not properly neutralize sequences such as '..' that can resolve to a location outside of the intended directory. Use realpath() to canonicalize paths and validate them against the allowed base directory before access."
+    languages: [c]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-22']
+
+  - id: c-use-after-free-cwe416
+    pattern-either:
+      # Pattern 1: 釋放堆積記憶體後，直接對該指標進行資料寫入（指派）或讀取
+      - pattern: |
+          free($PTR);
+          ...
+          $PTR = $VAL;
+      - pattern: |
+          free($PTR);
+          ...
+          $VAR = *$PTR;
+
+      # Pattern 2: 釋放指標後，在後續代碼中將該懸空指標當作參數傳入其他函式
+      - pattern: |
+          free($PTR);
+          ...
+          $FUNCNAME(..., $PTR, ...);
+
+      # Pattern 3: 釋放了結構體內部的指標欄位，隨後又透過該結構體存取或寫入該欄位
+      - pattern: |
+          free($OBJ->$MEMBER);
+          ...
+          $OBJ->$MEMBER = $VAL;
+      - pattern: |
+          free($OBJ->$MEMBER);
+          ...
+          $FUNCNAME(..., $OBJ->$MEMBER, ...);
+
+    message: "Use After Free (CWE-416): Referencing memory after it has been freed can cause a program to crash, use unexpected values, or execute arbitrary code. Ensure pointers are explicitly set to NULL immediately after being freed, and verify that no asynchronous tasks or subsequent code blocks attempt to access the freed memory."
+    languages: [c]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-416']
+
+  - id: c-out-of-bounds-read-cwe125
+    pattern-either:
+      # Pattern 1: 直接使用外部傳入、且未經過邊界檢查的整數作為陣列索引進行讀取
+      - pattern: |
+          int $IDX = $REQ.get_int(...);
+          ...
+          $VAL = $ARR[$IDX];
+
+      # Pattern 2: 在走訪緩衝區或陣列時，迴圈邊界錯誤（例如 <= 大小）導致讀取到最後一個元素的下一位
+      - pattern: |
+          $TYPE $BUF[$SIZE];
+          ...
+          for (int $I = 0; $I <= $SIZE; $I++) {
+              $VAR = $BUF[$I];
+          }
+
+      # Pattern 3: 對可能不含 Null 終止符的外部緩衝區直接使用 strlen()、strcpy() 或 %s 列印
+      - pattern: |
+          char $BUF[$SIZE];
+          ...
+          // 唯讀操作函數觸發
+          int $LEN = strlen($BUF);
+      - pattern: |
+          char $BUF[$SIZE];
+          ...
+          printf("%s", $BUF);
+
+      # Pattern 4: 解析二進位封包時，指標在迴圈中不斷遞增讀取，前方卻完全沒有檢查剩餘長度是否足夠
+      - pattern: |
+          char *$CUR = $PACKET;
+          ...
+          while (...) {
+              $VAL = *$CUR;
+              $CUR += $STEP;
+          }
+
+    message: "Out-of-bounds Read (CWE-125): The software reads data past the end, or before the beginning, of the intended buffer. This typically allows attackers to read sensitive information from other memory locations or cause a crash. Ensure all array indices and pointer offsets are strictly validated against buffer boundaries."
+    languages: [c]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-125']
+
+  - id: c-command-injection-cwe78
+    pattern-either:
+      # Pattern 1: 使用 sprintf / snprintf 拼接外部輸入到命令字串中，隨後調用 system()
+      - pattern: |
+          sprintf($CMD_BUF, "ping -c 4 %s", $REQ.get_string(...));
+          ...
+          system($CMD_BUF);
+      - pattern: |
+          snprintf($CMD_BUF, $LEN, "%s %s", $BASE_CMD, $INPUT);
+          ...
+          system($CMD_BUF);
+
+      # Pattern 2: 使用 strcpy / strcat 將外部輸入拼接到命令緩衝區，隨後使用 popen() 讀取執行結果
+      - pattern: |
+          strcpy($CMD_BUF, "/usr/bin/nslookup ");
+          ...
+          strcat($CMD_BUF, $INPUT_VAR);
+          ...
+          popen($CMD_BUF, $MODE);
+
+      # Pattern 3: 直接將未經過任何拼接與過濾的外部字串，直接當作指令傳入 system() 或 popen() 執行
+      - pattern: |
+          $INPUT = $REQ.get_string(...);
+          ...
+          system($INPUT);
+
+    message: "OS Command Injection (CWE-78): The software constructs all or part of an OS command using externally-influenced input from an upstream component, but it does not neutralize or incorrectly neutralizes special elements that could modify the intended OS command. Avoid passing untrusted strings directly to system() or popen(). Use safer alternatives like execl() or execve() with argument arrays."
+    languages: [c]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-78']
+
+  - id: c-code-injection-cwe94
+    pattern-either:
+      # Pattern 1: 將未過濾的外部輸入當作路徑傳入 dlopen()，導致惡意共用函式庫注入執行
+      - pattern: |
+          $LIB_PATH = $REQ.get_string(...);
+          ...
+          dlopen($LIB_PATH, $FLAGS);
+
+      # Pattern 2: 變更記憶體頁面屬性為可寫且可執行 (PROT_WRITE | PROT_EXEC)，隨後直接將其轉為函式指標執行
+      - pattern: |
+          mprotect($MEM, $SIZE, PROT_READ | PROT_WRITE | PROT_EXEC);
+          ...
+          void (*$FUNC)() = (void (*)())$MEM;
+          $FUNC();
+
+      # Pattern 3: C 程式內嵌腳本直譯器（例如 Lua Core），直接將外部字串丟進直譯器引擎執行
+      - pattern: |
+          $SCRIPT = $REQ.get_string(...);
+          ...
+          luaL_dostring($LUA_STATE, $SCRIPT);
+
+    message: "Code Injection (CWE-94): The software solidifies or generates code using external input without validation. This allows attackers to execute arbitrary machine code or scripts within the process context. Restrict dynamic loading pathways, avoid setting memory permissions to concurrently writable and executable, and thoroughly sanitize inputs destined for embedded script engines."
+    languages: [c]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-94']
+
+  - id: c-buffer-overflow-cwe120
+    pattern-either:
+      # Pattern 1: 使用完全不檢查長度的危險 C 函式（gets, strcpy, strcat）
+      - pattern: |
+          gets($BUF);
+      - pattern: |
+          strcpy($DEST, $SRC);
+      - pattern: |
+          strcat($DEST, $SRC);
+
+      # Pattern 2: 使用 sprintf 的 %s 格式化拼接，卻未限制來源長度
+      - pattern: |
+          sprintf($DEST, "%s", $SRC);
+      - pattern: |
+          sprintf($DEST, "/var/log/%s.log", $SRC);
+
+      # Pattern 3: 誤用限制長度函式，將長度限制設為來源長度（strlen(src)），導致長度檢查失效
+      - pattern: |
+          strncpy($DEST, $SRC, strlen($SRC));
+      - pattern: |
+          memcpy($DEST, $SRC, strlen($SRC));
+
+    message: "Buffer Copy without Checking Size of Input (CWE-120): The program copies an input buffer into a destination buffer without verifying that the destination buffer is large enough. This can overwrite adjacent memory, leading to a crash or arbitrary code execution. Replace unsafe functions with snprintf(), strncpy() [with destination size], or boundary-checked secure runtime alternatives."
+    languages: [c]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-120']
+
+  - id: c-unrestricted-file-upload-cwe434
+    pattern-either:
+      # Pattern 1: 完全不檢查檔名與副檔名，直接拼接儲存路徑並寫入檔案
+      - pattern: |
+          $FILENAME = $REQ.get_upload_filename(...);
+          ...
+          sprintf($PATH_BUF, "/www/htdocs/uploads/%s", $FILENAME);
+          ...
+          fopen($PATH_BUF, $MODE);
+
+      # Pattern 2: 僅依賴前端或外部傳入的 Content-Type 來判定檔案合法性
+      - pattern: |
+          $CTYPE = $REQ.get_header("Content-Type");
+          ...
+          if (strcmp($CTYPE, "image/jpeg") == 0) {
+              // ❌ 信任未驗證的 Content-Type 後直接儲存
+              fopen($DEST, "wb");
+          }
+
+      # Pattern 3: 黑名單檢查漏洞，僅過濾特定副檔名，卻直接放行其他危險副檔名
+      - pattern: |
+          if (strstr($FILENAME, ".cgi") != NULL) { 
+              return -1; 
+          }
+          // ❌ 漏掉 .sh, .pl, .php 等其他危險執行檔副檔名，隨後直接寫入
+          fopen($FILENAME, "wb");
+
+    message: "Unrestricted Upload of File with Dangerous Type (CWE-434): The software allows the attacker to upload or transfer files of dangerous types that can be automatically executed within the application's environment. Implement a strict whitelist of allowed extensions, enforce verification of file magic numbers (content headers), and store files outside the web root or executable directories."
+    languages: [c]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-434']
+
+  - id: c-null-pointer-deref-cwe476
+    pattern-either:
+      # Pattern 1: 呼交 malloc/calloc 等動態記憶體配置，未檢查 NULL 就直接寫入/存取
+      - pattern: |
+          $PTR = malloc($SIZE);
+          ...
+          *$PTR = $VAL;
+      - pattern: |
+          $PTR = malloc($SIZE);
+          ...
+          $PTR->$MEMBER = $VAL;
+
+      # Pattern 2: 呼叫 getenv/strstr 等可能傳回 NULL 的標準函式，未檢查即直接解引用
+      - pattern: |
+          $ENV = getenv($VAR);
+          ...
+          if ($ENV[0] == $VAL) { ... }
+      - pattern: |
+          $RES = strchr($STR, $CHAR);
+          ...
+          *$RES = $VAL;
+
+      # Pattern 3: 函式內部直接解引用傳入的指標參數，且該函式完全無任何防禦性檢查
+      - pattern: |
+          void $FUNC($TYPE *$PTR, ...) {
+              ...
+              $VAR = $PTR->$MEMBER;
+          }
+
+    message: "NULL Pointer Dereference (CWE-476): The program dereferences a pointer that it expects to be valid, but is NULL, typically causing a crash or denial of service. Always check the return values of memory allocation functions and lookup functions, and validate input pointer parameters before dereferencing."
+    languages: [c]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-476']
+
+  - id: c-stack-buffer-overflow-cwe121
+    pattern-either:
+      # Pattern 1: 在本地堆疊陣列上直接調用 strcpy/read 等不檢查長度的寫入
+      - pattern: |
+          void $FUNC(...) {
+            ...
+            char $BUF[$SIZE];
+            ...
+            strcpy($BUF, $SRC);
+          }
+      - pattern: |
+          void $FUNC(...) {
+            ...
+            char $BUF[$SIZE];
+            ...
+            read($FD, $BUF, $INPUT_LEN);
+          }
+
+      # Pattern 2: 使用 scanf / fscanf 讀取到堆疊緩衝區，格式化字串為未設限的 %s
+      - pattern: |
+          char $BUF[$SIZE];
+          ...
+          scanf("%s", $BUF);
+      - pattern: |
+          char $BUF[$SIZE];
+          ...
+          fscanf($FILE, "%s", $BUF);
+
+      # Pattern 3: 在堆疊上使用可變長度陣列(VLA)或 alloca()，且長度完全由外部輸入控制
+      - pattern: |
+          $LEN = $REQ.get_int(...);
+          ...
+          char $BUF[$LEN];
+      - pattern: |
+          $LEN = $REQ.get_int(...);
+          ...
+          $PTR = alloca($LEN);
+
+    message: "Stack-based Buffer Overflow (CWE-121): A buffer allocated on the stack is overwritten with more data than it can hold, risking corruption of the function's return address and arbitrary code execution. Restrict input boundaries, use safe string sizing flags (e.g., %31s for scanf), and avoid dynamic stack allocations like alloca() or untrusted Variable Length Arrays (VLAs)."
+    languages: [c]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-121']
+
+  - id: c-untrusted-deserialization-cwe502
+    pattern-either:
+      # Pattern 1: 將未過濾的外部網路或檔案二進位序列化資料，直接強轉或還原至包含指標的結構體中
+      - pattern: |
+          $TYPE *$OBJ = ($TYPE *)malloc(sizeof($TYPE));
+          ...
+          recv($SOCK, $OBJ, $SIZE, $FLAGS);
+          ...
+          $OBJ->$POINTER_MEMBER = $VAL;
+      - pattern: |
+          fread($STRUCT_PTR, sizeof($STRUCT), 1, $FILE);
+          ...
+          $STRUCT_PTR->$POINTER_MEMBER = $VAL;
+
+      # Pattern 2: 使用 cJSON/JSON-C 解析外部字串後，直接信任並使用資料內定義的 "length"、"type" 作為動態行為或配置依據
+      - pattern: |
+          $JSON = cJSON_Parse($INPUT);
+          ...
+          $LEN_OBJ = cJSON_GetObjectItemCaseSensitive($JSON, "length");
+          ...
+          malloc($LEN_OBJ->valueint);
+      - pattern: |
+          $JSON = cJSON_Parse($INPUT);
+          ...
+          $TYPE_OBJ = cJSON_GetObjectItemCaseSensitive($JSON, "type");
+          ...
+          $ARR[$TYPE_OBJ->valueint] = $VAL;
+
+      # Pattern 3: 自訂序列化物件解析器（自訂結構），在遞迴處理巢狀或關聯資料時，未對結構的深度、長度進行邊界校驗
+      - pattern: |
+          void $PARSE_FUNC($TYPE *$NODE) {
+              ...
+              $PARSE_FUNC($NODE->$NEXT);
+          }
+
+    message: "Deserialization of Untrusted Data (CWE-502): The application deserializes untrusted data without sufficiently verifying that the resulting data will be valid. In C, this often leads to type confusion, arbitrary memory pointer manipulation, or integer overflows via attacker-controlled structure fields. Always strictly validate boundaries, schema sizes, and structure types before reinstating nested objects or pointers."
+    languages: [c]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-502']
+
+  - id: c-heap-buffer-overflow-cwe122
+    pattern-either:
+      # Pattern 1: 在 malloc 分配的 Heap 緩衝區上，直接調用 strcpy/memcpy 等不檢查長度的寫入
+      - pattern: |
+          $BUF = malloc($SIZE);
+          ...
+          strcpy($BUF, $SRC);
+      - pattern: |
+          $BUF = malloc($SIZE);
+          ...
+          memcpy($BUF, $SRC, $INPUT_LEN);
+
+      # Pattern 2: 相乘計算大小發生整數溢位，導致 malloc 分配了極小空間，隨後在寫入時發生堆積溢位
+      - pattern: |
+          $TOTAL = $COUNT * $SIZE;
+          $BUF = malloc($TOTAL);
+          ...
+          for (int $I = 0; $I < $COUNT; $I++) {
+              $BUF[$I] = $VAL;
+          }
+
+      # Pattern 3: 指標在 Heap 緩衝區中錯誤步進或缺少殘餘邊界校驗，直接解引用指派寫入
+      - pattern: |
+          $BUF = malloc($SIZE);
+          ...
+          $CUR = $BUF + $OFFSET;
+          ...
+          *$CUR = $VAL;
+
+    message: "Heap-based Buffer Overflow (CWE-122): A buffer allocated on the heap is overwritten with more data than it can hold, which can corrupt heap metadata and lead to arbitrary code execution. Ensure the source length is smaller than the allocated size, validate multiplication operations against integer overflows before calling malloc(), and strictly check pointer arithmetic bounds."
+    languages: [c]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-122']
+
+  - id: c-incorrect-authorization-cwe863
+    pattern-either:
+      # Pattern 1: 敏感操作（例如修改密碼/系統設定）與權限檢查邏輯倒置，或操作完全在權限檢查之外
+      - pattern: |
+          modify_system_setting(...);
+          ...
+          if ($REQ.is_admin == 0) {
+              return -1;
+          }
+      - pattern: |
+          $REQ.execute_action(...);
+          ...
+          if (check_auth(...) == 0) {
+              return -1;
+          }
+
+      # Pattern 2: 直接信任外部傳入的權限/角色參數，並以此作為授權決策的基礎
+      - pattern: |
+          int $IS_ADMIN = $REQ.get_int_param("is_admin");
+          ...
+          if ($IS_ADMIN == 1) {
+              // ❌ 漏洞：直接信任外部參數來授予系統最高權限
+              allow_admin_access(...);
+          }
+      - pattern: |
+          char *$ROLE = $REQ.get_str_param("role");
+          ...
+          if (strcmp($ROLE, "admin") == 0) {
+              allow_admin_access(...);
+          }
+
+      # Pattern 3: 呼叫敏感的特權變更函式（如 setuid），卻完全沒有檢查其傳回值是否成功
+      - pattern: |
+          setuid($UID);
+          ...
+          // ❌ 漏洞：如果 setuid 失敗，程式仍以 root 權限繼續執行後續對使用者的操作
+          perform_user_action(...);
+
+    message: "Incorrect Authorization (CWE-863): The software performs an authorization check when a user attempts to access a resource or perform an action, but it does not correctly ensure that the user has the necessary privileges. Never rely on client-side parameters for access control, always verify permission *before* executing privileged operations, and strictly check return codes of privilege-dropping functions like setuid()."
+    languages: [c]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-863']
+
+  - id: c-improper-input-validation-cwe20
+    pattern-either:
+      # Pattern 1: 未對外部輸入的整數進行範圍/負數驗證，直接作為陣列索引進行記憶體存取
+      - pattern: |
+          int $IDX = $REQ.get_int();
+          ...
+          $ARR[$IDX] = $VAL;
+      - pattern: |
+          int $SIZE = $REQ.get_int();
+          ...
+          memset($BUF, 0, $SIZE);
+
+      # Pattern 2: 未驗證/未過濾外部字串中的危險字元，直接帶入 system() 執行或作為 printf 格式化參數
+      - pattern: |
+          char *$INPUT = $REQ.get_str();
+          ...
+          system($INPUT);
+      - pattern: |
+          char *$INPUT = $REQ.get_str();
+          ...
+          printf($INPUT);
+
+      # Pattern 3: 解析自訂結構或通訊協定時，直接使用封包內的長度欄位而未與實際接收資料大小校驗
+      - pattern: |
+          $HEADER = ($TYPE *)$PACKET;
+          ...
+          $LEN = $HEADER->length;
+          ...
+          memcpy($DEST, $PACKET + $OFFSET, $LEN);
+
+    message: "Improper Input Validation (CWE-20): The product receives input from an upstream component, but does not validate or incorrectly validates that the input has the required properties. This often leads to buffer overflows, out-of-bounds reads/writes, command injection, or format string vulnerabilities. Always strictly validate inputs against an allowlist, check boundary limits, verify integer signedness, and sanitize special characters."
+    languages: [c]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-20']
+
+  - id: c-improper-access-control-cwe284
+    pattern-either:
+      # Pattern 1: 處理敏感系統操作（如更新韌體、硬體控制）的函式，內部直接執行卻完全沒有任何權限或登入檢查
+      - pattern: |
+          void $FUNC(...) {
+              // ❌ 漏洞：函式開頭直接執行敏感操作，無任何權限校驗或狀態檢查
+              ...
+              execute_firmware_update(...);
+              ...
+          }
+      - pattern: |
+          void $FUNC(...) {
+              ...
+              write_hardware_register(...);
+              ...
+          }
+
+      # Pattern 2: 建立敏感檔案時，直接將權限（mode）設定為所有人皆可讀寫（如 0666 / 0777）
+      - pattern: |
+          open($FILENAME, $FLAGS, 0666);
+      - pattern: |
+          open($FILENAME, $FLAGS, 0777);
+      - pattern: |
+          creat($FILENAME, 0666);
+
+      # Pattern 3: 使用防護較弱的暫時降權函式（seteuid），使得低權限流程有可能被利用並重新提權
+      - pattern: |
+          seteuid($UID);
+          ...
+          process_untrusted_input(...);
+
+    message: "Improper Access Control (CWE-284): The software does not restrict or incorrectly restricts access to a resource from an unauthorized actor. Ensure all APIs exposing critical functions include explicit authentication/authorization guards, assign restrictive file creation masks (e.g., 0600 or utilizing umask), and completely and permanently drop privileges when executing untrusted application logical components."
+    languages: [c]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-284']
+
+  - id: c-information-disclosure-cwe200
+    pattern-either:
+      # Pattern 1: 宣告結構體後，未經 memset 清空（包含 Padding），就直接透過 write/send/copy_to_user 發送
+      - pattern: |
+          $STRUCT_TYPE $VAR;
+          ...
+          $VAR.$MEMBER = $VAL;
+          ...
+          write($FD, &$VAR, sizeof($STRUCT_TYPE));
+      - pattern: |
+          $STRUCT_TYPE $VAR;
+          ...
+          copy_to_user($TO, &$VAR, sizeof($STRUCT_TYPE));
+
+      # Pattern 2: 處理完敏感資料（如 key, password）後，直接呼叫 free() 而沒有先進行記憶體擦除覆寫
+      - pattern: |
+          $KEY_TYPE *$KEY = malloc($SIZE);
+          ...
+          free($KEY);
+
+      # Pattern 3: 在網路發送或公開回應中，直接串接底層核心錯誤訊息或記憶體指標位址
+      - pattern: |
+          char *$ERR = strerror(errno);
+          ...
+          send($SOCKET, $ERR, ...);
+      - pattern: |
+          sprintf($BUF, "Error at address: %p", $PTR);
+          ...
+          send($SOCKET, $BUF, ...);
+
+    message: "Exposure of Sensitive Information (CWE-200): The product exposes sensitive information to an actor who is not authorized to have access to that information. Ensure structures sent over network/boundaries are completely zero-initialized (including padding bytes), explicitly wipe sensitive keys/passwords from memory using secure methods before freeing, and avoid sending raw pointers or internal system error details directly to clients."
+    languages: [c]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-200']
+
+  - id: c-missing-authentication-cwe306
+    pattern-either:
+      # Pattern 1: 根據外部輸入的動作指令，未經任何 auth 檢查就直接執行關鍵功能（如工廠重設、修改金鑰）
+      - pattern: |
+          if (strcmp($CMD, "FACTORY_RESET") == 0) {
+              // ❌ 漏洞：直接執行關鍵功能，中間沒有任何身份驗證攔截
+              factory_reset_device(...);
+          }
+      - pattern: |
+          if ($OPCODE == $RESET_OP) {
+              change_admin_password(...);
+          }
+
+      # Pattern 2: 關鍵操作函式只接收資料參數，完全沒有傳入或驗證 Session/Token 的認證狀態
+      - pattern: |
+          void $FUNC(char *$NEW_IP) {
+              ...
+              // ❌ 漏洞：此關鍵函式內部直接調用核心修改邏輯，卻沒有引入任何認證狀態（如 Session 結構體）的校驗
+              apply_network_config($NEW_IP);
+              ...
+          }
+
+      # Pattern 3: 特殊的除錯或後門指令分支，直接跳過正常的身分驗證邏輯
+      - pattern: |
+          if (strcmp($CMD, "DEBUG_ROOT") == 0) {
+              // ❌ 漏洞：硬編碼的除錯後門，完全不需要經過正常的 login_verify 流程
+              spawn_root_shell(...);
+          }
+
+    message: "Missing Authentication for Critical Function (CWE-306): The product does not perform an authentication check for a critical function that requires a provable user identity. Ensure all entry points to sensitive or privileged actions (e.g., system configuration, device resets, software updates) explicitly verify that the requesting session is fully authenticated before proceeding."
+    languages: [c]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-306']
+
+  - id: c-ssrf-server-side-request-forgery-cwe918
+    pattern-either:
+      # Pattern 1: 直接將不信任的外部輸入作為完整 URL 傳給 libcurl 執行
+      - pattern: |
+          char *$URL = $REQ.get_str();
+          ...
+          curl_easy_setopt($CURL, CURLOPT_URL, $URL);
+          ...
+          curl_easy_perform($CURL);
+
+      # Pattern 2: 使用 sprintf 等函式，將不信任的外部輸入（如 IP 或 Host）直接拼接進 URL 的主機位置
+      - pattern: |
+          char *$HOST = $REQ.get_str();
+          ...
+          sprintf($URL_BUF, "http://%s/api/v1/data", $HOST);
+          ...
+          curl_easy_setopt($CURL, CURLOPT_URL, $URL_BUF);
+
+      # Pattern 3: 在拼接 URL 路徑或參數時未過濾 CR-LF (\r\n)，導致可以操縱 HTTP 請求結構
+      - pattern: |
+          char *$PATH = $REQ.get_str();
+          ...
+          sprintf($URL_BUF, "http://internal-service.local/%s", $PATH);
+          ...
+          curl_easy_setopt($CURL, CURLOPT_URL, $URL_BUF);
+
+    message: "Server-Side Request Forgery (SSRF) (CWE-918): The web server receives a URL or an input to construct a URL from an upstream component and focuses on fetching a resource without fully validating the destination. Ensure all user-supplied target destinations are strictly validated against an allowlist of permitted domains/IPs, restrict allowed schemes to 'http' or 'https' only, and rigorously filter line-break characters (CR/LF) to prevent protocol smuggling."
+    languages: [c]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-918']
+
+  - id: c-command-injection-cwe77
+    pattern-either:
+      # Pattern 1: 使用 sprintf 拼接不可信輸入並直接丟給 system 或 popen 執行
+      - pattern: |
+          char *$INPUT = $REQ.get_str();
+          ...
+          sprintf($CMD_BUF, "...", ..., $INPUT, ...);
+          ...
+          system($CMD_BUF);
+      - pattern: |
+          char *$INPUT = $REQ.get_str();
+          ...
+          sprintf($CMD_BUF, "...", ..., $INPUT, ...);
+          ...
+          popen($CMD_BUF, $MODE);
+
+      # Pattern 2: 使用 strcat 或 snprintf 進行直接字串疊加，未經任何特殊字元（如 ;, &&, |）過濾
+      - pattern: |
+          char *$INPUT = $REQ.get_str();
+          ...
+          strcat($CMD_BUF, $INPUT);
+          ...
+          system($CMD_BUF);
+
+      # Pattern 3: 雖然使用 exec 系列函式，但卻顯式調用了 "/bin/sh" 且使用 "-c" 執行拼接字串
+      - pattern: |
+          char *$INPUT = $REQ.get_str();
+          ...
+          sprintf($CMD_BUF, "...", $INPUT);
+          ...
+          execl("/bin/sh", "sh", "-c", $CMD_BUF, NULL);
+      - pattern: |
+          char *$INPUT = $REQ.get_str();
+          ...
+          sprintf($CMD_BUF, "...", $INPUT);
+          ...
+          execle("/bin/sh", "sh", "-c", $CMD_BUF, NULL, $ENV);
+
+    message: "Command Injection (CWE-77): The software constructs all or part of an OS command using externally-influenced input, but it does not neutralize or incorrectly neutralizes special elements. Ensure you avoid passing user input directly to system() or popen(). Prefer structured alternatives like execve() without passing through shell interpreters (/bin/sh -c), or strictly validate inputs using an alphanumeric allowlist."
+    languages: [c]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-77']
+
+  - id: c-idor-authorization-bypass-cwe639
+    pattern-either:
+      # Pattern 1: 直接拿外部傳入的用戶 ID / 檔案 Key 拼接成檔案路徑直接開啟，缺乏擁有權驗證
+      - pattern: |
+          char *$USER_ID = $REQ.get_str();
+          ...
+          sprintf($PATH_BUF, "/var/config/user_%s.dat", $USER_ID);
+          ...
+          FILE *$FP = fopen($PATH_BUF, $MODE);
+      
+      # Pattern 2: 直接把外部輸入的整數 ID 當作陣列索引，直接讀寫記憶體中的物件
+      - pattern: |
+          int $IDX = $REQ.get_int();
+          ...
+          $VAL = $USER_ARRAY[$IDX];
+          ...
+          return $VAL;
+
+      # Pattern 3: 在執行刪除或修改敏感函式時，只傳入了目標物件的金鑰，完全忽略了當前 Session 的權限判定
+      - pattern: |
+          char *$TARGET_KEY = $REQ.get_str();
+          ...
+          // ❌ 漏洞：函式只處理目標金鑰，卻沒有將當前執行者的 uid 或 session 傳入用以比對擁有權
+          delete_profile_by_key($TARGET_KEY);
+
+    message: "Authorization Bypass Through User-Controlled Key (CWE-639): The software does not thoroughly state or verify if the user is authorized to access the record/object corresponding to the user-controlled key. Ensure that before fulfilling a request to view, modify, or delete an object, the application validates that the active session identity has explicit ownership or privilege over that specific object ID."
+    languages: [c]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-639']
+
+  - id: c-unbounded-resource-allocation-cwe770
+    pattern-either:
+      # Pattern 1: 直接將不可信的輸入當作長度傳給 malloc/calloc，且前方沒有最大值限制檢查
+      - pattern: |
+          int $SZ = $REQ.get_int();
+          ...
+          // ❌ 漏洞：沒有檢查 $SZ 是否大於 MAX_ALLOWED_SIZE，直接配置記憶體
+          char *$BUF = (char *)malloc($SZ);
+      - pattern: |
+          int $COUNT = $REQ.get_int();
+          ...
+          int *$BUF = calloc($COUNT, $SIZE);
+
+      # Pattern 2: 由外部輸入控制的迴圈計數器，缺乏安全上限限制
+      - pattern: |
+          int $LIMIT = $REQ.get_int();
+          ...
+          // ❌ 漏洞：迴圈迭代次數完全由外部控制，可能導致 CPU 耗盡
+          for (int $I = 0; $I < $LIMIT; $I++) {
+              $FUNC(...);
+          }
+
+      # Pattern 3: 使用變長陣列 (VLA) 或 alloca，其大小由外部輸入決定
+      - pattern: |
+          int $SZ = $REQ.get_int();
+          ...
+          // ❌ 漏洞：在堆疊上分配不受控的大小，極易觸發 Stack Overflow
+          char $ARR[$SZ];
+      - pattern: |
+          int $SZ = $REQ.get_int();
+          ...
+          char *$BUF = alloca($SZ);
+
+    message: "Allocation of Resources Without Limits or Throttling (CWE-770): The software allocates a resource based on an unsubstantiated or overly large user input without imposing an upper bound constraint or throttling mechanism. Ensure all size parameters, loop bounds, and buffer allocations derived from untrusted sources are rigorously validated against a safe, maximum threshold before allocation or execution."
+    languages: [c]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-770']
+
+  - id: c-improper-authentication-cwe287
+    pattern-either:
+      # Pattern 1: 只要在 if 條件中直接使用 strcmp / strncmp 比對外部輸入與憑證，不論變數叫什麼，直接攔截（時序攻擊風險）
+      - pattern: |
+          if (strcmp($STR1, $STR2) == 0) { ... }
+      - pattern: |
+          if (strncmp($STR1, $STR2, $LEN) == 0) { ... }
+
+      # Pattern 2: 呼叫了帶有 auth / verify / login 關鍵字的驗證函式，後面卻緊接著執行 grant_access 且中途毫無任何 if 判定
+      - pattern: |
+          verify_user_password(...);
+          grant_access(...);
+
+      # Pattern 3: 使用 memcmp 比對金鑰時，長度參數直接套用了 strlen，這在純 C AST 中是非常鮮明的錯誤特徵
+      - pattern: |
+          memcmp($K1, $K2, strlen(...))
+
+    message: "Improper Authentication (CWE-287): Flawed authentication implementation detected. Avoid using 'strcmp' for security-sensitive comparisons due to timing attacks. Always check the return value of authentication functions before granting access, and ensure 'memcmp' length is not bounded by 'strlen'."
+    languages: [c]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-287']
+
+  - id: c-improper-privilege-management-cwe269
+    pattern-either:
+      # Pattern 1: 呼叫了改變特權的系統函式，卻直接當成獨立陳述句，完全沒有用 if 檢查傳回值
+      - pattern: |
+          setuid($UID);
+      - pattern: |
+          seteuid($UID);
+      - pattern: |
+          setgid($GID);
+
+      # Pattern 2: 程式碼中顯式提升特權為 root (0) 後，直接呼叫了敏感檔案操作，但該函式結束前卻完全沒有降權
+      - pattern: |
+          seteuid(0);
+          do_sensitive_file_write(...);
+
+      # Pattern 3: 錯誤的降權順序 — 先呼叫了 setuid 降回普通用戶，後面才呼叫 setgid，此時 setgid 定會失敗
+      - pattern: |
+          setuid(getuid());
+          setgid($GID);
+
+    message: "Improper Privilege Management (CWE-269): Flawed privilege drop or elevation logic detected. Always check the return value of setuid/seteuid/setgid to ensure the privilege operation succeeded. Ensure setgid() is called before setuid() when dropping privileges completely."
+    languages: [c]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-269']
+
+  - id: c-buffer-operation-bounds-cwe119
+    pattern-either:
+      # Pattern 1: 使用完全不檢查邊界的標準字串操作函式（strcpy / strcat）
+      - pattern: |
+          strcpy($DEST, $SRC)
+      - pattern: |
+          strcat($DEST, $SRC)
+
+      # Pattern 2: 使用 memcpy 或 sprintf 進行資料複製與格式化，且缺乏長度限制安全防護
+      - pattern: |
+          memcpy($DEST, $SRC, $LEN)
+      - pattern: |
+          sprintf($DEST, "%s", ...)
+
+      # Pattern 3: 指標加法偏移或陣列下標直接指派，且右側緊隨賦值操作（直接的記憶體越界寫入特徵）
+      - pattern: |
+          *($PTR + $INDEX) = $VALUE;
+      - pattern: |
+          $ARR[$INDEX] = $VALUE;
+
+    message: "Improper Restriction of Operations within the Bounds of a Memory Buffer (CWE-119): Unsafe buffer manipulation detected. Avoid using 'strcpy', 'strcat', or unsafe 'sprintf'. Always validate lengths before calling 'memcpy' or performing direct pointer/array index indexing to prevent arbitrary memory corruption."
+    languages: [c]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-119']
+
+  - id: c-hardcoded-credentials-cwe798
+    pattern-either:
+      # Pattern 1: 只要字串內容完全吻合特定寫死的 API 金鑰或密碼值（最經典的字串常數比對）
+      - pattern: |
+          "AIzaSyA1234567890-B_ExampleKeyString"
+      - pattern: |
+          "SuperAdminPassword2026!"
+
+      # Pattern 2: 只要呼叫了金鑰初始化函式（不論裡面帶什麼參數、傳入什麼陣列，只要調用此特徵就攔截）
+      - pattern: |
+          fake_initialize_crypto(...)
+
+      # Pattern 3: 在任意函式呼叫中，直接傳入包含 password= 或 pwd= 的硬編碼字串
+      - pattern: |
+          $FUNC(..., "...password=...", ...)
+      - pattern: |
+          $FUNC(..., "...pwd=...", ...)
+
+    message: "Use of Hard-coded Credentials (CWE-798): Hard-coded password, API key, or cryptographic key detected in source code. Store credentials securely in environment variables or external configuration files."
+    languages: [c]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-798']
+
+  - id: c-integer-overflow-cwe190
+    pattern-either:
+      # Pattern 1: 捕捉直接進行乘法並指派給變數的特徵（常見於未限制的 malloc 大小計算）
+      - pattern: |
+          $VAR = $COUNT * $SIZE;
+
+      # Pattern 2: 捕捉直接對變數進行 += 累加的特徵（常見於計數器或長度累加）
+      - pattern: |
+          $VAR += $INPUT;
+
+      # Pattern 3: 捕捉直接在變數上進行加法並賦值的特徵
+      - pattern: |
+          $VAR = $BASE + $OFFSET;
+
+    message: "Integer Overflow or Wraparound (CWE-190): Unchecked arithmetic operation on integers may lead to wraparound (e.g., positive value becoming negative or zero). Always validate inputs against maximum boundaries (e.g., INT_MAX) before performing arithmetic, especially when the result is used for memory allocation or array indexing."
+    languages: [c]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-190']
+
+  - id: c-uncontrolled-resource-consumption-cwe400
+    pattern-either:
+      # Pattern 1: 記憶體配置函式（malloc）的參數直接綁定外部整數轉換函數（如 atoi），直接攔截 OOM 風險
+      - pattern: |
+          malloc(atoi(...));
+
+      # Pattern 2: 迴圈的結束條件直接受控制於任意外部轉換變數，且缺乏上限檢查
+      - pattern: |
+          for (int $I = 0; $I < atoi(...); $I++) { ... }
+
+      # Pattern 3: 專門鎖定在控制流分支中，開啟檔案後直接返回（return），而完全沒有在該分支閉環內呼叫 fclose 的行為
+      - pattern: |
+          FILE* $FP = fopen(...);
+          ...
+          if (...) {
+              return $VAL;
+          }
+
+    message: "Uncontrolled Resource Consumption (CWE-400): Unbounded resource allocation or loop execution detected. Ensure inputs governing memory allocation size, loop iterations, or file handlers are checked against maximum upper bounds to prevent Denial of Service (DoS)."
+    languages: [c]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-400']
+
+  - id: c-hidden-functionality-cwe912
+    pattern-either:
+      # --- Pattern 1: Hardcoded magic password backdoor via string comparison ---
+      - pattern: strcmp($VAR, "backdoor_secret_pass") == 0
+      - pattern: strcmp($VAR, "admin_override_master") == 0
+      - pattern: strncmp($VAR, "backdoor_secret_pass", $LEN) == 0
+      - pattern: strncmp($VAR, "admin_override_master", $LEN) == 0
+
+      # --- Pattern 2: Undocumented environment variables triggering execution ---
+      - pattern: |
+          $ENV = getenv("ENABLE_SECRET_BACKDOOR");
+          ...
+          if ($ENV) {
+            ...
+          }
+
+      # --- Pattern 3: Hardcoded magic constant value bypass ---
+      - pattern: |
+          if ($VAR == 0xBAADC0DE) {
+            ...
+          }
+
+    message: "Hidden Functionality / Backdoor (CWE-912): Hardcoded magic strings, master passwords, or undocumented environment variables can bypass normal authentication mechanisms, creating severe architectural vulnerabilities."
+    languages: [c]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-912']
+
+  - id: c-untrusted-inclusion-cwe829
+    pattern-either:
+      # --- Pattern 1: Dynamic Library Loading (Windows & POSIX) ---
+      - pattern: LoadLibraryA($PATH)
+      - pattern: LoadLibraryW($PATH)
+      - pattern: LoadLibraryExA($PATH, ...)
+      - pattern: LoadLibraryExW($PATH, ...)
+      - pattern: dlopen($PATH, ...)
+
+      # --- Pattern 2: Command Execution APIs capable of untrusted binary inclusion ---
+      - pattern: system($CMD)
+      - pattern: popen($CMD, ...)
+      - pattern: winexec($CMD, ...)
+
+      # --- Pattern 3: Windows Process Spawning APIs ---
+      - pattern: CreateProcessA($APP, ...)
+      - pattern: CreateProcessW($APP, ...)
+      - pattern: ShellExecuteA(..., $OP, $FILE, ...)
+      - pattern: ShellExecuteW(..., $OP, $FILE, ...)
+
+    message: "Inclusion of Functionality from Untrusted Control Sphere (CWE-829): Loading external binaries, libraries, or scripts from potentially untrusted or unverified paths can lead to Arbitrary Code Execution (ACE) via hijacking or path manipulation."
+    languages: [c]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-829']
+
+  - id: c-attribute-pollution-cwe1321
+    pattern-either:
+      # --- Pattern 1: Hardcoded dangerous pollution keywords in assignment ---
+      - pattern: json_object_set($OBJ, "__proto__", $VAL)
+      - pattern: json_object_set($OBJ, "prototype", $VAL)
+      - pattern: json_object_set($OBJ, "constructor", $VAL)
+      - pattern: dict_set_property($OBJ, "__proto__", $VAL)
+
+      # --- Pattern 2: Multi-level dynamic property access without validation ---
+      - pattern: |
+          $NODE = dict_get_node($OBJ, $K1);
+          dict_set_property($NODE, $K2, $VAL);
+
+      # --- Pattern 3: Unvalidated dynamic user-controlled key injection ---
+      - pattern: dict_set_property($OBJ, $USER_KEY, $USER_VAL)
+      - pattern: json_object_set($OBJ, $USER_KEY, $USER_VAL)
+
+    message: "Improper Control of Attribute/Property Pollution (CWE-1321): Unvalidated user-controlled keys or sensitive words (like '__proto__', 'constructor') are passed into dynamic object/dictionary property setters. This can lead to internal state tampering or configuration bypass."
+    languages: [c]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-1321']
+
+  - id: c-improper-cert-validation-cwe295
+    pattern-either:
+      # --- Pattern 1: Libcurl Disabling Verification (0 / FALSE) ---
+      - pattern: curl_easy_setopt($CURL, CURLOPT_SSL_VERIFYPEER, 0)
+      - pattern: curl_easy_setopt($CURL, CURLOPT_SSL_VERIFYHOST, 0)
+      - pattern: curl_easy_setopt($CURL, CURLOPT_SSL_VERIFYPEER, FALSE)
+      - pattern: curl_easy_setopt($CURL, CURLOPT_SSL_VERIFYHOST, FALSE)
+
+      # --- Pattern 2: OpenSSL Callback Always Approving Bad Certs ---
+      - pattern: |
+          int $FUNC(int $OK, X509_STORE_CTX *$CTX) {
+            ...
+            return 1;
+          }
+
+      # --- Pattern 3: GnuTLS Disabling Peer Verification Option ---
+      - pattern: gnutls_ssl_set_verify_flags($SESSION, GNUTLS_VERIFY_DISABLE)
+
+    message: "Improper Certificate Validation (CWE-295): Disabling SSL/TLS certificate or hostname verification exposes the application to Man-in-the-Middle (MitM) attacks. Ensure peer certificates are properly verified against a trusted CA bundle."
+    languages: [c]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-295']
+
+  - id: c-weak-hash-cwe328
+    pattern-either:
+      # --- Pattern 1: Legacy OpenSSL Direct Hash APIs ---
+      - pattern: MD5($DATA, $LEN, $MD)
+      - pattern: SHA1($DATA, $LEN, $MD)
+
+      # --- Pattern 2: OpenSSL Init Context APIs ---
+      - pattern: MD5_Init($CTX)
+      - pattern: SHA1_Init($CTX)
+
+      # --- Pattern 3: OpenSSL EVP High-Level Message Digests ---
+      - pattern: EVP_md5()
+      - pattern: EVP_sha1()
+
+      # --- Pattern 4: Generic/Custom C Handlers or Identifiers ---
+      - pattern: $OBJ.init("MD5")
+      - pattern: $OBJ.init("SHA1")
+
+    message: "Use of Weak Cryptographic Hash (CWE-328): MD5 or SHA-1 algorithms are mathematically broken and prone to collision attacks. Upgrade to secure alternatives like EVP_sha256() or EVP_sha3_256()."
+    languages: [c]
+    severity: ERROR
+    metadata:
+      cwe: ['CWE-328']

@@ -1,0 +1,348 @@
+{
+  "_meta": {
+    "description": "漏洞類別定義：以內部類別代號為主鍵。label 對應 CodeBERT 訓練標籤；aliases 為容錯別名（大小寫不敏感、底線與連字號互通）；primary_cwe 為精準命中、related_cwe 為相關命中；display_name 為呈現給使用者的精確漏洞名稱；codebert_supported 表示現有 CodeBERT 模型是否已能辨識此類別（false 者目前僅靠 Semgrep 偵測，待重新訓練後開啟）。",
+    "version": "3.2.0",
+    "alias_matching": "case-insensitive; underscore and hyphen treated as equal",
+    "display_rule": "對使用者一律顯示 display_name（精確漏洞名稱），CWE 編號作為次要輔助資訊",
+    "codebert_note": "架構定位：Semgrep 選點定位 → CodeBERT 深度分析。label 13-17（Web 類）已於 3.2.0 開啟支援；label 18-21（記憶體類）仍待重訓，僅適用 C/C++。",
+    "changelog": "3.2.0 CodeBERT 重訓後開啟 B 類支援：csrf/ssrf/idor/file_upload/broken_access_control（label 13-17）的 codebert_supported 改為 true。記憶體類（18-21）仍為 false，需 C/C++ 樣本重訓。｜3.1.0 weak_cryptography 的 related_cwe 新增 CWE-327/326/916，涵蓋 DES/ECB/RC4 等弱演算法與密碼雜湊強度不足。"
+  },
+  "clean": {
+    "label": 0,
+    "display_name": "正常程式碼",
+    "name_zh": "正常程式碼",
+    "aliases": [
+      "safe",
+      "normal",
+      "benign"
+    ],
+    "primary_cwe": null,
+    "related_cwe": [],
+    "enabled": true,
+    "codebert_supported": true
+  },
+  "command_injection": {
+    "label": 1,
+    "display_name": "指令注入",
+    "name_zh": "指令注入",
+    "aliases": [
+      "cmd_injection",
+      "os_command_injection",
+      "command-injection"
+    ],
+    "primary_cwe": "CWE-78",
+    "related_cwe": [
+      "CWE-77"
+    ],
+    "enabled": true,
+    "codebert_supported": true
+  },
+  "sql_injection": {
+    "label": 2,
+    "display_name": "SQL 注入",
+    "name_zh": "SQL 注入",
+    "aliases": [
+      "sqli",
+      "sql-injection"
+    ],
+    "primary_cwe": "CWE-89",
+    "related_cwe": [],
+    "enabled": true,
+    "codebert_supported": true
+  },
+  "code_execution": {
+    "label": 3,
+    "display_name": "程式碼執行",
+    "name_zh": "程式碼執行",
+    "aliases": [
+      "dynamic_code_exec",
+      "unsafe_eval",
+      "code-execution",
+      "code_injection",
+      "rce"
+    ],
+    "primary_cwe": "CWE-94",
+    "related_cwe": [],
+    "enabled": true,
+    "codebert_supported": true
+  },
+  "data_exfiltration": {
+    "label": 4,
+    "display_name": "資料外洩",
+    "name_zh": "資料外洩",
+    "aliases": [
+      "data_leakage",
+      "data-exfiltration",
+      "information_exposure"
+    ],
+    "primary_cwe": "CWE-200",
+    "related_cwe": [
+      "CWE-918"
+    ],
+    "enabled": true,
+    "codebert_supported": true
+  },
+  "backdoor": {
+    "label": 5,
+    "display_name": "後門",
+    "name_zh": "後門",
+    "aliases": [
+      "backdoor_debug",
+      "debug_backdoor",
+      "hidden_backdoor"
+    ],
+    "primary_cwe": "CWE-912",
+    "related_cwe": [
+      "CWE-798"
+    ],
+    "enabled": true,
+    "codebert_supported": true
+  },
+  "weak_cryptography": {
+    "label": 6,
+    "display_name": "弱加密",
+    "name_zh": "弱加密",
+    "aliases": [
+      "weak_crypto",
+      "weak-cryptography",
+      "weak_hash"
+    ],
+    "primary_cwe": "CWE-328",
+    "related_cwe": [
+      "CWE-295",
+      "CWE-327",
+      "CWE-326",
+      "CWE-916"
+    ],
+    "enabled": true,
+    "codebert_supported": true
+  },
+  "hardcoded_secret": {
+    "label": 7,
+    "display_name": "硬編碼密碼",
+    "name_zh": "硬編碼密碼",
+    "aliases": [
+      "hardcoded_credential",
+      "hardcoded-secret",
+      "hardcoded_password"
+    ],
+    "primary_cwe": "CWE-798",
+    "related_cwe": [],
+    "enabled": true,
+    "codebert_supported": true
+  },
+  "path_traversal": {
+    "label": 8,
+    "display_name": "路徑遊走",
+    "name_zh": "路徑遊走",
+    "aliases": [
+      "path-traversal",
+      "directory_traversal",
+      "zip_slip"
+    ],
+    "primary_cwe": "CWE-22",
+    "related_cwe": [],
+    "enabled": true,
+    "codebert_supported": true
+  },
+  "insecure_deserialization": {
+    "label": 9,
+    "display_name": "不安全反序列化",
+    "name_zh": "不安全反序列化",
+    "aliases": [
+      "unsafe_deserialization",
+      "insecure-deserialization"
+    ],
+    "primary_cwe": "CWE-502",
+    "related_cwe": [],
+    "enabled": true,
+    "codebert_supported": true
+  },
+  "xss": {
+    "label": 10,
+    "display_name": "跨站腳本 (XSS)",
+    "name_zh": "跨站腳本",
+    "aliases": [
+      "cross_site_scripting",
+      "cross-site-scripting"
+    ],
+    "primary_cwe": "CWE-79",
+    "related_cwe": [],
+    "enabled": true,
+    "codebert_supported": true
+  },
+  "prototype_pollution": {
+    "label": 11,
+    "display_name": "原型污染",
+    "name_zh": "原型污染",
+    "aliases": [
+      "prototype-pollution",
+      "proto_pollution"
+    ],
+    "primary_cwe": "CWE-1321",
+    "related_cwe": [],
+    "enabled": true,
+    "codebert_supported": true
+  },
+  "malicious_import": {
+    "label": 12,
+    "display_name": "惡意套件",
+    "name_zh": "惡意套件",
+    "aliases": [
+      "malicious_package",
+      "malicious-import",
+      "typosquatting",
+      "supply_chain"
+    ],
+    "primary_cwe": "CWE-829",
+    "related_cwe": [
+      "CWE-94",
+      "CWE-918",
+      "CWE-200"
+    ],
+    "enabled": true,
+    "codebert_supported": true
+  },
+  "csrf": {
+    "label": 13,
+    "display_name": "跨站請求偽造 (CSRF)",
+    "name_zh": "跨站請求偽造",
+    "aliases": [
+      "cross_site_request_forgery",
+      "cross-site-request-forgery"
+    ],
+    "primary_cwe": "CWE-352",
+    "related_cwe": [],
+    "enabled": true,
+    "codebert_supported": true
+  },
+  "ssrf": {
+    "label": 14,
+    "display_name": "伺服器端請求偽造 (SSRF)",
+    "name_zh": "伺服器端請求偽造",
+    "aliases": [
+      "server_side_request_forgery",
+      "server-side-request-forgery"
+    ],
+    "primary_cwe": "CWE-918",
+    "related_cwe": [],
+    "enabled": true,
+    "codebert_supported": true
+  },
+  "idor": {
+    "label": 15,
+    "display_name": "不安全的直接物件參考 (IDOR)",
+    "name_zh": "不安全的直接物件參考",
+    "aliases": [
+      "insecure_direct_object_reference",
+      "broken_object_level_authorization",
+      "bola"
+    ],
+    "primary_cwe": "CWE-639",
+    "related_cwe": [],
+    "enabled": true,
+    "codebert_supported": true
+  },
+  "file_upload": {
+    "label": 16,
+    "display_name": "不受限檔案上傳",
+    "name_zh": "不受限檔案上傳",
+    "aliases": [
+      "unrestricted_file_upload",
+      "unrestricted-upload",
+      "dangerous_file_upload"
+    ],
+    "primary_cwe": "CWE-434",
+    "related_cwe": [],
+    "enabled": true,
+    "codebert_supported": true
+  },
+  "broken_access_control": {
+    "label": 17,
+    "display_name": "權限控制缺陷",
+    "name_zh": "權限控制缺陷",
+    "aliases": [
+      "access_control",
+      "broken-access-control",
+      "missing_authorization",
+      "incorrect_authorization",
+      "missing_authentication",
+      "improper_access_control",
+      "auth_bypass",
+      "authorization",
+      "authentication"
+    ],
+    "primary_cwe": "CWE-284",
+    "related_cwe": [
+      "CWE-862",
+      "CWE-863",
+      "CWE-306",
+      "CWE-287",
+      "CWE-269"
+    ],
+    "enabled": true,
+    "codebert_supported": true
+  },
+  "buffer_overflow": {
+    "label": 18,
+    "display_name": "緩衝區溢位",
+    "name_zh": "緩衝區溢位",
+    "aliases": [
+      "buffer-overflow",
+      "buffer_overrun",
+      "bufferoverflow"
+    ],
+    "primary_cwe": "CWE-120",
+    "related_cwe": [
+      "CWE-121",
+      "CWE-122",
+      "CWE-119"
+    ],
+    "enabled": true,
+    "codebert_supported": false
+  },
+  "out_of_bounds": {
+    "label": 19,
+    "display_name": "越界存取",
+    "name_zh": "越界存取",
+    "aliases": [
+      "out-of-bounds",
+      "oob",
+      "out_of_bounds_read",
+      "out_of_bounds_write"
+    ],
+    "primary_cwe": "CWE-787",
+    "related_cwe": [
+      "CWE-125"
+    ],
+    "enabled": true,
+    "codebert_supported": false
+  },
+  "use_after_free": {
+    "label": 20,
+    "display_name": "釋放後使用",
+    "name_zh": "釋放後使用",
+    "aliases": [
+      "use-after-free",
+      "uaf"
+    ],
+    "primary_cwe": "CWE-416",
+    "related_cwe": [],
+    "enabled": true,
+    "codebert_supported": false
+  },
+  "integer_overflow": {
+    "label": 21,
+    "display_name": "整數溢位",
+    "name_zh": "整數溢位",
+    "aliases": [
+      "integer-overflow",
+      "int_overflow",
+      "integer_wraparound"
+    ],
+    "primary_cwe": "CWE-190",
+    "related_cwe": [],
+    "enabled": true,
+    "codebert_supported": false
+  }
+}

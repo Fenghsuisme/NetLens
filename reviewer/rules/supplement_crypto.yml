@@ -1,0 +1,144 @@
+rules:
+  # ════════════════════════════════════════════════════════
+  # 弱加密補強規則（CWE-327 / CWE-326）
+  #
+  # 補強原因：
+  #   實測弱加密召回率 7/9，漏抓的 Java 樣本用 DES/ECB，
+  #   官方規則其實有抓到，但回報 CWE-326——而該編號原本不在 catalog 中，
+  #   導致 CWE 對應鏈斷裂、finding 被丟棄。
+  #
+  #   已於 config 補上 CWE-326/327/916 並歸入 weak_cryptography。
+  #   本規則再補一層自訂偵測，不依賴官方規則的 CWE 用法。
+  #
+  # 涵蓋範圍：
+  #   演算法：DES、3DES/DESede、RC2、RC4、Blowfish
+  #   工作模式：ECB（相同明文產生相同密文，洩漏統計特徵）
+  #   雜湊：MD5、SHA-1（僅在用於密碼或簽章時危險）
+  # ════════════════════════════════════════════════════════
+
+  # ── Java：Cipher.getInstance 使用弱演算法或 ECB ──
+  - id: java-weak-cipher-algorithm
+    languages: [java]
+    severity: ERROR
+    message: >-
+      Weak Cryptography (CWE-327): 使用已被證實不安全的加密演算法或工作模式。
+      DES（56位元金鑰）易遭暴力破解，ECB 模式會讓相同明文產生相同密文而洩漏統計特徵。
+      應改用 AES-256-GCM 或 ChaCha20-Poly1305。
+    metadata:
+      cwe: [CWE-327]
+      category: security
+      confidence: HIGH
+    patterns:
+      - pattern-either:
+          - pattern: Cipher.getInstance($ALGO)
+          - pattern: Cipher.getInstance($ALGO, ...)
+          - pattern: new SecretKeySpec($KEY, $ALGO)
+          - pattern: KeyGenerator.getInstance($ALGO)
+          - pattern: SecretKeyFactory.getInstance($ALGO)
+          - patterns:
+              - pattern: |
+                  String $A = $ALGO;
+                  ...
+                  Cipher.getInstance($A);
+      - metavariable-regex:
+          metavariable: $ALGO
+          regex: (?i).*\b(DES|DESede|TripleDES|3DES|RC2|RC4|ARCFOUR|Blowfish)\b.*
+
+  - id: java-ecb-mode
+    languages: [java]
+    severity: ERROR
+    message: >-
+      Weak Cryptography (CWE-327): 使用 ECB 工作模式。
+      ECB 不使用初始向量，相同明文區塊會加密成相同密文，洩漏資料的統計模式。
+      應改用 GCM 或 CBC（搭配隨機 IV）。
+    metadata:
+      cwe: [CWE-327]
+      category: security
+      confidence: HIGH
+    patterns:
+      - pattern-either:
+          - pattern: Cipher.getInstance($ALGO)
+          - pattern: Cipher.getInstance($ALGO, ...)
+          - patterns:
+              - pattern: |
+                  String $A = $ALGO;
+                  ...
+                  Cipher.getInstance($A);
+      - metavariable-regex:
+          metavariable: $ALGO
+          regex: (?i).*/ECB/.*
+
+  # ── Python：cryptography / pycryptodome 使用弱演算法 ──
+  - id: python-weak-cipher-algorithm
+    languages: [python]
+    severity: ERROR
+    message: >-
+      Weak Cryptography (CWE-327): 使用已被證實不安全的加密演算法或 ECB 模式。
+      應改用 AES-GCM（cryptography 套件的 AESGCM）或 ChaCha20Poly1305。
+    metadata:
+      cwe: [CWE-327]
+      category: security
+      confidence: HIGH
+    pattern-either:
+      - pattern: algorithms.TripleDES(...)
+      - pattern: algorithms.Blowfish(...)
+      - pattern: algorithms.ARC4(...)
+      - pattern: algorithms.IDEA(...)
+      - pattern: modes.ECB(...)
+      - pattern: DES.new(...)
+      - pattern: DES3.new(...)
+      - pattern: ARC4.new(...)
+      - pattern: Blowfish.new(...)
+      - patterns:
+          - pattern: $CIPHER($ALGO, ...)
+          - metavariable-regex:
+              metavariable: $ALGO
+              regex: (?i)["'].*\b(DES|3DES|RC4|ECB|Blowfish)\b.*["']
+      - patterns:
+          - pattern: |
+              $A = $ALGO
+              ...
+              $CIPHER($A, ...)
+          - metavariable-regex:
+              metavariable: $ALGO
+              regex: (?i)["'].*\b(DES|3DES|RC4|ECB|Blowfish)\b.*["']
+
+  # ── JavaScript / TypeScript ──
+  - id: js-weak-cipher-algorithm
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: >-
+      Weak Cryptography (CWE-327): 使用已被證實不安全的加密演算法或 ECB 模式。
+      應改用 aes-256-gcm。
+    metadata:
+      cwe: [CWE-327]
+      category: security
+      confidence: HIGH
+    patterns:
+      - pattern-either:
+          - pattern: crypto.createCipheriv($ALGO, ...)
+          - pattern: crypto.createDecipheriv($ALGO, ...)
+          - pattern: crypto.createCipher($ALGO, ...)
+      - metavariable-regex:
+          metavariable: $ALGO
+          regex: (?i)["'].*\b(des|des3|des-ede3|rc2|rc4|bf|blowfish|ecb)\b.*["']
+
+  # ── PHP ──
+  - id: php-weak-cipher-algorithm
+    languages: [php]
+    severity: ERROR
+    message: >-
+      Weak Cryptography (CWE-327): 使用已被證實不安全的加密演算法或 ECB 模式。
+      應改用 openssl_encrypt 搭配 aes-256-gcm。
+    metadata:
+      cwe: [CWE-327]
+      category: security
+      confidence: HIGH
+    patterns:
+      - pattern-either:
+          - pattern: openssl_encrypt($DATA, $ALGO, ...)
+          - pattern: openssl_decrypt($DATA, $ALGO, ...)
+          - pattern: mcrypt_encrypt($ALGO, ...)
+      - metavariable-regex:
+          metavariable: $ALGO
+          regex: (?i)["'].*\b(des|des-ede3|rc2|rc4|bf|blowfish|ecb)\b.*["']

@@ -1,0 +1,211 @@
+rules:
+  # ════════════════════════════════════════════════════════
+  # 路徑遊走補強規則（CWE-22）
+  #
+  # 補強原因：實測召回率 6/9，漏抓 3 筆模式一致——
+  #   「基底路徑常數 + 外部輸入拼接 → 傳入檔案操作」
+  #
+  #   Java  File file = new File(BASE_DIR + fileName);      拼接在參數裡
+  #   PHP   $path = $root . $_GET['x'];  readfile($path);   先拼成變數再傳入
+  #
+  # 現有規則多半只認 "../" 字面值或單一函式呼叫，
+  # 抓不到「拼接」這個核心特徵。
+  #
+  # 設計要點：
+  #   偵測「檔案操作的參數是拼接結果」，而非只看函式名，
+  #   這樣才能區分
+  #     open("/fixed/path/config.json")      安全，不報
+  #     open(BASE_DIR + userInput)           危險，要報
+  # ════════════════════════════════════════════════════════
+
+  # ── Java：檔案操作參數含拼接 ──
+  - id: java-path-traversal-concat
+    languages: [java]
+    severity: ERROR
+    message: >-
+      Path Traversal (CWE-22): 檔案路徑以字串拼接組成，外部輸入未經正規化檢查。
+      應以 Paths.get(base).resolve(name).normalize() 後驗證是否仍在允許目錄內，
+      或改用 FilenameUtils.getName() 去除路徑成分。
+    metadata:
+      cwe: [CWE-22]
+      category: security
+      confidence: HIGH
+    pattern-either:
+      # 拼接直接寫在參數裡
+      - pattern: new File($A + $B)
+      - pattern: new File($A + $B, ...)
+      - pattern: new FileInputStream($A + $B)
+      - pattern: new FileOutputStream($A + $B)
+      - pattern: new FileReader($A + $B)
+      - pattern: new FileWriter($A + $B)
+      - pattern: new RandomAccessFile($A + $B, ...)
+      - pattern: Paths.get($A + $B)
+      - pattern: Paths.get($A + $B, ...)
+      - pattern: Files.readAllBytes(Paths.get($A + $B))
+      - pattern: Files.newInputStream(Paths.get($A + $B))
+      # 先拼成變數再傳入
+      - patterns:
+          - pattern: |
+              String $P = $A + $B;
+              ...
+              new File($P);
+      - patterns:
+          - pattern: |
+              String $P = $A + $B;
+              ...
+              new FileInputStream($P);
+      - patterns:
+          - pattern: |
+              String $P = $A + $B;
+              ...
+              Paths.get($P);
+
+  # ── PHP：檔案操作參數含拼接 ──
+  - id: php-path-traversal-concat
+    languages: [php]
+    severity: ERROR
+    message: >-
+      Path Traversal (CWE-22): 檔案路徑以字串拼接組成，未過濾相對目錄符號。
+      應以 basename() 去除路徑成分，或用 realpath() 正規化後驗證是否在允許目錄內。
+    metadata:
+      cwe: [CWE-22]
+      category: security
+      confidence: HIGH
+    patterns:
+      - pattern-either:
+          # 拼接直接寫在參數裡
+          - pattern: readfile($A . $B)
+          - pattern: file_get_contents($A . $B)
+          - pattern: file_put_contents($A . $B, ...)
+          - pattern: fopen($A . $B, ...)
+          - pattern: include($A . $B)
+          - pattern: include_once($A . $B)
+          - pattern: require($A . $B)
+          - pattern: require_once($A . $B)
+          - pattern: unlink($A . $B)
+          - pattern: filesize($A . $B)
+          - pattern: copy($A . $B, ...)
+          # 先拼成變數再傳入（實務最常見，中間可能隔著檢查與 header 呼叫）
+          - patterns:
+              - pattern: |
+                  $P = $A . $B;
+                  ...
+                  readfile($P);
+          - patterns:
+              - pattern: |
+                  $P = $A . $B;
+                  ...
+                  file_get_contents($P);
+          - patterns:
+              - pattern: |
+                  $P = $A . $B;
+                  ...
+                  fopen($P, ...);
+          - patterns:
+              - pattern: |
+                  $P = $A . $B;
+                  ...
+                  include($P);
+          - patterns:
+              - pattern: |
+                  $P = $A . $B;
+                  ...
+                  require($P);
+      # base 不是 magic 常數 —— 排除 Laravel 等框架 bootstrap 的
+      # require __DIR__ . '/../...' 這類純常數拼接（非使用者輸入，不是路徑遊走）
+      - metavariable-pattern:
+          metavariable: $A
+          patterns:
+            - pattern-not: __DIR__
+            - pattern-not: __FILE__
+            - pattern-not: dirname(...)
+      # 已用 basename()/realpath() 去除路徑成分的不報
+      - pattern-not-inside: |
+          $X = basename(...);
+          ...
+      - pattern-not-inside: |
+          $X = realpath(...);
+          ...
+
+  # ── Python：檔案操作參數含拼接或 f-string ──
+  - id: python-path-traversal-concat
+    languages: [python]
+    severity: ERROR
+    message: >-
+      Path Traversal (CWE-22): 檔案路徑以拼接或 f-string 組成，外部輸入未經檢查。
+      應以 os.path.basename() 去除路徑成分，或用 os.path.realpath() 正規化後
+      驗證是否仍在允許目錄內。
+    metadata:
+      cwe: [CWE-22]
+      category: security
+      confidence: HIGH
+    pattern-either:
+      - pattern: open($A + $B, ...)
+      - pattern: open($A + $B)
+      - pattern: open(f"...")
+      - pattern: os.remove($A + $B)
+      - pattern: os.unlink($A + $B)
+      - pattern: shutil.copy($A + $B, ...)
+      - pattern: send_file($A + $B)
+      - pattern: send_file(f"...")
+      - patterns:
+          - pattern: |
+              $P = $A + $B
+              ...
+              open($P, ...)
+      - patterns:
+          - pattern: |
+              $P = f"..."
+              ...
+              open($P, ...)
+      - patterns:
+          - pattern: |
+              $P = $A + $B
+              ...
+              send_file($P)
+
+  # ── JavaScript / TypeScript：檔案操作參數含拼接或模板字串 ──
+  - id: js-path-traversal-concat
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: >-
+      Path Traversal (CWE-22): 檔案路徑以拼接或模板字串組成，外部輸入未經檢查。
+      應以 path.basename() 去除路徑成分，或用 path.resolve() 正規化後
+      驗證是否仍在允許目錄內。
+    metadata:
+      cwe: [CWE-22]
+      category: security
+      confidence: HIGH
+    pattern-either:
+      - pattern: fs.readFile($A + $B, ...)
+      - pattern: fs.readFileSync($A + $B, ...)
+      - pattern: fs.writeFile($A + $B, ...)
+      - pattern: fs.writeFileSync($A + $B, ...)
+      - pattern: fs.createReadStream($A + $B)
+      - pattern: fs.unlink($A + $B, ...)
+      - pattern: fs.existsSync($A + $B)
+      - pattern: $RES.sendFile($A + $B)
+      - pattern: fs.readFile(`...`, ...)
+      - pattern: fs.readFileSync(`...`, ...)
+      - pattern: fs.createReadStream(`...`)
+      - pattern: $RES.sendFile(`...`)
+      - patterns:
+          - pattern: |
+              $P = $A + $B;
+              ...
+              fs.readFile($P, ...);
+      - patterns:
+          - pattern: |
+              $P = $A + $B;
+              ...
+              fs.readFileSync($P, ...);
+      - patterns:
+          - pattern: |
+              const $P = `...`;
+              ...
+              fs.readFileSync($P, ...);
+      - patterns:
+          - pattern: |
+              $P = $A + $B;
+              ...
+              $RES.sendFile($P);
