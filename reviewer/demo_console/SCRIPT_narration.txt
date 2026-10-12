@@ -1,0 +1,20 @@
+[場景 1｜開場：告警洪水（0:00–0:24）]
+Every time a company scans its code for security flaws, developers get buried in alerts — nine hundred fifty-three across just ten open-source projects. Most are false alarms, so people stop reading, and real vulnerabilities slip through. AI could help — but for banks, hospitals and manufacturers, uploading private source code to a cloud AI is not an option.
+
+[場景 1｜標題卡（0:24–0:31）]
+This is NetLens: an AI security gateway that runs entirely on-premises — on Intel hardware, powered by OpenVINO.
+
+[場景 2｜兩階段掃描漏斗（0:31–1:08）]
+NetLens works in two stages. First, Semgrep rules sweep the entire codebase and flag anything that might be dangerous — fast and thorough, but noisy. Then every flagged function goes to our fine-tuned CodeBERT model, which actually reads the code and decides: real vulnerability, or false alarm? Here it is on healthchecks, a real open-source project of twenty-one thousand lines. Fifty-one alerts go in; thirty-seven are thrown out as noise. Across ten projects and six hundred forty thousand lines, the alerts a developer has to read drop by eighty-four percent.
+
+[場景 3｜硬體賽跑（1:08–1:52）]
+To run on-premises, NetLens must be fast on hardware companies already own. So we converted our model to OpenVINO and quantized it to INT8 — eight-bit integers instead of thirty-two-bit floats. Same model, same one hundred fifty-two functions, three engines: PyTorch on the CPU, OpenVINO INT8 on the same Intel CPU, and OpenVINO on the Intel integrated GPU — watch its load climb in real time. When both OpenVINO engines finish, PyTorch is still less than halfway. In our benchmarks, that's nearly four times the throughput on the same chip — and the GPU keeps the CPU free for Semgrep.
+
+[場景 4｜本地 LLM 修漏洞（1:52–2:25）]
+Finding a vulnerability is only half the job. So on the same Intel GPU, NetLens runs a local code model, Qwen2.5-Coder, compressed to four bits. It explains how an attacker would exploit the bug, then writes the patch — a SQL injection becomes a parameterized query. About fifteen tokens per second on laptop integrated graphics — and zero bytes of source code leave the machine.
+
+[場景 5｜數據卡（2:25–2:44）]
+Quantization makes the model four times smaller — with no loss in accuracy: macro-F1 is identical to the third decimal place across two thousand seven hundred forty-two test functions. And on an Intel Arc Pro B70, we project three to five milliseconds per function — ten thousand findings reviewed in under half a minute.
+
+[場景 6｜架構收尾（2:44–2:55）]
+Semgrep on the CPU. CodeBERT and the fix-writing model sharing a single thirty-two-gigabyte Arc Pro B70. The whole pipeline, in a single ASUS workstation. Your code never leaves. Your vulnerabilities do.

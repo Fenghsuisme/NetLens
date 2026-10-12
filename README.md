@@ -1,4 +1,50 @@
-# 🔍 NetLens｜AI 時代的瀏覽器護目鏡
+# 🔍 NetLens — On-Prem AI Security Gateway on Intel
+
+> 企業內部署的 AI 資安閘道：找出私有原始碼中的真實漏洞，**原始碼完全不離開內網**。
+> ASUS UGen AI League｜Workplace AI × Thunderstorm（Intel Arc Pro B70）
+
+🎬 **Demo 影片**：https://youtu.be/BQLh9FSQCBY
+
+## 運作方式
+
+```
+原始碼 ──► Semgrep 規則選點（Intel CPU，高召回）
+       ──► CodeBERT 17 類判定，濾掉誤報（OpenVINO INT8，Intel CPU / GPU）
+       ──► 本地 Code LLM 解釋漏洞並產生修補（OpenVINO GenAI INT4，同一張 Intel GPU）
+       ──► 掃描報告 + 修補建議
+```
+
+## 關鍵數據
+
+| 項目 | 結果 |
+|---|---|
+| 誤報密度（10 個開源專案、64 萬行） | 3.6 → 0.56 alerts/KLOC（−84%） |
+| INT8 量化後模型大小 | 476 MB → 121 MB（3.9× 小） |
+| 量化後準確率（2,742 筆測試函式） | macro-F1 0.7159 → 0.7160（逐類別變化 ≤ ±1.4pp） |
+| Intel CPU 吞吐（同一顆晶片） | PyTorch 3.0 → OpenVINO INT8 11.8 函式/秒（3.9×） |
+| Intel 內顯延遲 | 93 ms / 函式 |
+| 本地 LLM（Qwen2.5-Coder-3B INT4 @ Intel 內顯） | ~15 tokens/s，0 bytes 上雲 |
+| Intel Arc Pro B70（**估算**，367 INT8 TOPS） | ~3–5 ms / 函式 |
+
+實測平台：Intel Core 5 210H 筆電。完整方法、數據與重現步驟見
+**[reviewer/docs/hardware_openvino_report.md](reviewer/docs/hardware_openvino_report.md)**。
+
+## 快速開始
+
+需要已訓練的 CodeBERT 權重 `reviewer/models/codebert_v7v8_safe/`（未隨 repo 公開）。
+
+```bash
+cd reviewer
+python scripts/ov/ov_export.py                                   # 匯出 OpenVINO IR + INT8 量化
+python scan.py path/to/project/ --backend openvino               # Intel CPU
+python scan.py path/to/project/ --backend openvino --ov-device GPU   # Intel GPU
+```
+
+Demo 展示介面（影片中的 Command Center）：見 **[reviewer/demo_console/README.md](reviewer/demo_console/README.md)**。
+
+---
+
+## 其他模組：AI 圖片真偽鑑識（detection/）
 
 > 在 AI 生成內容氾濫的時代，NetLens 幫你驗證網路圖片的真偽。
 

@@ -1,0 +1,24 @@
+{
+ "device": "GPU.0",
+ "device_name": "Intel(R) Graphics (iGPU)",
+ "n": 549,
+ "pytorch": {
+  "accuracy": 0.7231329690346083,
+  "macro_f1": 0.7436269367503053
+ },
+ "codebert_ov_fp32": {
+  "accuracy": 0.7213114754098361,
+  "macro_f1": 0.742626053533999,
+  "top1_agreement_vs_pytorch": 0.9981785063752276
+ },
+ "codebert_ov_int8": {
+  "accuracy": 0.7176684881602914,
+  "macro_f1": 0.7395334467666018,
+  "top1_agreement_vs_pytorch": 0.9817850637522769
+ },
+ "codebert_ov_int8wo": {
+  "accuracy": 0.7213114754098361,
+  "macro_f1": 0.7431318877600543,
+  "top1_agreement_vs_pytorch": 0.9890710382513661
+ }
+}

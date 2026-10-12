@@ -1,0 +1,9 @@
+scan.py --backend pytorch vs --backend openvino (INT8, CPU) — end-to-end verdict parity
+(--no-official; Semgrep identical, only CodeBERT backend differs)
+
+file        findings  same label+verdict
+test.py        90        89/90   diff: line 450 path-traversal  pytorch=9 disputed  -> openvino=4 incoherent
+test.js        88        88/88
+test.php        7         7/7
+Test.java      89        88/89   diff: line 1193 class-pollution pytorch=0 filtered -> openvino=5 incoherent
+TOTAL         274       272/274 (99.3%)

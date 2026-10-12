@@ -1,0 +1,5 @@
+# 測試集內容（未公開）：用 build_race_set.py 在本機產生
+data/race_set.json
+# 原始旁白錄音（處理後的 narration/scene_*.wav 已納入）
+narration_src/
+__pycache__/

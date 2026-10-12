@@ -1,0 +1,67 @@
+[
+ {
+  "id": "F1",
+  "file": "billing/invoices.py",
+  "language": "python",
+  "line": 7,
+  "category": "SQL Injection (CWE-89)",
+  "semgrep_rule": "python.flask.sqli-string-concat",
+  "codebert": {
+   "label": 2,
+   "name": "SQL 注入"
+  },
+  "code": "import sqlite3\nfrom flask import request, jsonify\n\ndef get_invoice():\n    invoice_id = request.args.get('id', '')\n    conn = sqlite3.connect('invoices.db')\n    cursor = conn.cursor()\n    query = \"SELECT * FROM invoices WHERE invoice_id = '\" + invoice_id + \"'\"\n    cursor.execute(query)\n    result = cursor.fetchall()\n    conn.close()\n    return jsonify(result)\n"
+ },
+ {
+  "id": "F2",
+  "file": "admin/users.js",
+  "language": "javascript",
+  "line": 3,
+  "category": "OS Command Injection (CWE-78)",
+  "semgrep_rule": "javascript.child-process.exec-template-literal",
+  "codebert": {
+   "label": 1,
+   "name": "指令注入"
+  },
+  "code": "const { exec } = require('child_process');\n\nfunction deleteUserAccount(username) {\n  const command = `userdel -r ${username}`;\n  exec(command, (error, stdout, stderr) => {\n    if (error) {\n      console.error(`Failed to delete user: ${error.message}`);\n      return;\n    }\n    console.log(`Account deleted: ${username}`);\n  });\n}\n"
+ },
+ {
+  "id": "F3",
+  "file": "src/main/java/billing/InvoiceService.java",
+  "language": "java",
+  "line": 6,
+  "category": "Insecure Deserialization (CWE-502)",
+  "semgrep_rule": "java.lang.objectinputstream-readobject",
+  "codebert": {
+   "label": 9,
+   "name": "不安全反序列化"
+  },
+  "code": "import java.io.*;\n\npublic class InvoiceService {\n    public Invoice processInvoice(byte[] invoiceBytes) throws IOException, ClassNotFoundException {\n        ByteArrayInputStream bis = new ByteArrayInputStream(invoiceBytes);\n        ObjectInputStream ois = new ObjectInputStream(bis);\n        Invoice invoice = (Invoice) ois.readObject();\n        ois.close();\n        invoice.calculateTotal();\n        invoice.applyDiscounts();\n        return invoice;\n    }\n}\n"
+ },
+ {
+  "id": "F4",
+  "file": "app/welcome.py",
+  "language": "python",
+  "line": 8,
+  "category": "Cross-Site Scripting (CWE-79)",
+  "semgrep_rule": "python.flask.xss-fstring-html-response",
+  "codebert": {
+   "label": 10,
+   "name": "跨站腳本"
+  },
+  "code": "from flask import Flask, request, make_response\n\napp = Flask(__name__)\n\n@app.route('/welcome')\ndef welcome():\n    username = request.args.get('username', 'Guest')\n    html = f'<html><body><h1>Welcome, {username}!</h1></body></html>'\n    resp = make_response(html)\n    resp.headers['Content-Type'] = 'text/html'\n    return resp\n"
+ },
+ {
+  "id": "F5",
+  "file": "server/docs.js",
+  "language": "javascript",
+  "line": 9,
+  "category": "Path Traversal (CWE-22)",
+  "semgrep_rule": "javascript.express.path-join-user-input",
+  "codebert": {
+   "label": 8,
+   "name": "路徑遊走"
+  },
+  "code": "const express = require('express');\nconst path = require('path');\nconst fs = require('fs');\nconst app = express();\nconst DOCS_DIR = '/var/www/docs';\n\napp.get('/document/:filename', (req, res) => {\n    const filename = req.params.filename;\n    const filePath = path.join(DOCS_DIR, filename);\n    fs.readFile(filePath, 'utf8', (err, data) => {\n        if (err) {\n            res.status(404).send('File not found');\n            return;\n        }\n        res.type('text/plain').send(data);\n    });\n});\n"
+ }
+]

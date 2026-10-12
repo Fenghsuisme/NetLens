@@ -1,0 +1,315 @@
+{
+ "generated_from": "narration_out/scene_*.wav + SCRIPT_narration.txt",
+ "scenes": {
+  "1": {
+   "audio": "/narration/scene_1.wav",
+   "dur": 30.02,
+   "cues": [
+    {
+     "s": 0.0,
+     "e": 3.2,
+     "text": "Every time a company scans its code for security flaws,"
+    },
+    {
+     "s": 3.25,
+     "e": 4.9,
+     "text": "developers get buried in alerts"
+    },
+    {
+     "s": 4.95,
+     "e": 9.1,
+     "text": "953 across just 10 open-source projects."
+    },
+    {
+     "s": 9.15,
+     "e": 11.99,
+     "text": "Most are false alarms, so people stop reading,"
+    },
+    {
+     "s": 12.04,
+     "e": 14.6,
+     "text": "and real vulnerabilities slip through."
+    },
+    {
+     "s": 14.65,
+     "e": 17.73,
+     "text": "AI could help — but for banks, hospitals and manufacturers,"
+    },
+    {
+     "s": 17.78,
+     "e": 22.2,
+     "text": "uploading private source code to a cloud AI is not an option."
+    },
+    {
+     "s": 22.9,
+     "e": 23.87,
+     "text": "This is NetLens:"
+    },
+    {
+     "s": 23.92,
+     "e": 27.37,
+     "text": "an AI security gateway that runs entirely on-premises"
+    },
+    {
+     "s": 27.42,
+     "e": 30.02,
+     "text": "on Intel hardware, powered by OpenVINO."
+    }
+   ],
+   "actions": []
+  },
+  "2": {
+   "audio": "/narration/scene_2.wav",
+   "dur": 35.48,
+   "cues": [
+    {
+     "s": 0.0,
+     "e": 1.78,
+     "text": "NetLens works in two stages."
+    },
+    {
+     "s": 1.83,
+     "e": 7.61,
+     "text": "First, Semgrep rules sweep the entire codebase and flag anything that might be dangerous"
+    },
+    {
+     "s": 7.66,
+     "e": 9.42,
+     "text": "fast and thorough, but noisy."
+    },
+    {
+     "s": 9.47,
+     "e": 13.74,
+     "text": "Then every flagged function goes to our fine-tuned CodeBERT model,"
+    },
+    {
+     "s": 13.79,
+     "e": 16.2,
+     "text": "which actually reads the code and decides:"
+    },
+    {
+     "s": 16.25,
+     "e": 18.84,
+     "text": "real vulnerability, or false alarm?"
+    },
+    {
+     "s": 18.89,
+     "e": 20.52,
+     "text": "Here it is on healthchecks,"
+    },
+    {
+     "s": 20.57,
+     "e": 23.42,
+     "text": "a real open-source project of 21,000 lines."
+    },
+    {
+     "s": 23.47,
+     "e": 25.72,
+     "text": "51 alerts go in;"
+    },
+    {
+     "s": 25.77,
+     "e": 29.08,
+     "text": "37 are thrown out as noise."
+    },
+    {
+     "s": 29.13,
+     "e": 31.82,
+     "text": "Across 10 projects and 640,000 lines,"
+    },
+    {
+     "s": 31.87,
+     "e": 35.48,
+     "text": "the alerts a developer has to read drop by 84%."
+    }
+   ],
+   "actions": [
+    {
+     "t": 1.0,
+     "do": "start"
+    }
+   ]
+  },
+  "3": {
+   "audio": "/narration/scene_3.wav",
+   "dur": 39.78,
+   "cues": [
+    {
+     "s": 0.0,
+     "e": 5.16,
+     "text": "To run on-premises, NetLens must be fast on hardware companies already own."
+    },
+    {
+     "s": 5.21,
+     "e": 9.32,
+     "text": "So we converted our model to OpenVINO and quantized it to INT8"
+    },
+    {
+     "s": 9.37,
+     "e": 12.92,
+     "text": "8-bit integers instead of 32-bit floats."
+    },
+    {
+     "s": 12.97,
+     "e": 17.03,
+     "text": "Same model, same 152 functions, three engines:"
+    },
+    {
+     "s": 17.08,
+     "e": 21.56,
+     "text": "PyTorch on the CPU, OpenVINO INT8 on the same Intel CPU,"
+    },
+    {
+     "s": 21.61,
+     "e": 26.36,
+     "text": "and OpenVINO on the Intel integrated GPU — watch its load climb in real time."
+    },
+    {
+     "s": 26.41,
+     "e": 32.68,
+     "text": "When both OpenVINO engines finish, PyTorch is still less than halfway."
+    },
+    {
+     "s": 32.73,
+     "e": 36.51,
+     "text": "In our benchmarks, that's nearly 4× the throughput on the same chip"
+    },
+    {
+     "s": 36.56,
+     "e": 39.78,
+     "text": "and the GPU keeps the CPU free for Semgrep."
+    }
+   ],
+   "actions": [
+    {
+     "t": 0.2,
+     "do": "start"
+    }
+   ]
+  },
+  "4": {
+   "audio": "/narration/scene_4.wav",
+   "dur": 24.6,
+   "cues": [
+    {
+     "s": 0.0,
+     "e": 2.86,
+     "text": "Finding a vulnerability is only half the job."
+    },
+    {
+     "s": 2.91,
+     "e": 7.46,
+     "text": "So on the same Intel GPU, NetLens runs a local code model,"
+    },
+    {
+     "s": 7.51,
+     "e": 11.0,
+     "text": "Qwen2.5-Coder, compressed to 4 bits."
+    },
+    {
+     "s": 11.05,
+     "e": 13.6,
+     "text": "It explains how an attacker would exploit the bug,"
+    },
+    {
+     "s": 13.65,
+     "e": 17.71,
+     "text": "then writes the patch — a SQL injection becomes a parameterized query."
+    },
+    {
+     "s": 17.76,
+     "e": 21.39,
+     "text": "About 15 tokens per second on laptop integrated graphics"
+    },
+    {
+     "s": 21.44,
+     "e": 24.6,
+     "text": "and 0 bytes of source code leave the machine."
+    }
+   ],
+   "actions": [
+    {
+     "t": 1.0,
+     "do": "start"
+    }
+   ]
+  },
+  "5": {
+   "audio": "/narration/scene_5.wav",
+   "dur": 21.18,
+   "cues": [
+    {
+     "s": 0.0,
+     "e": 6.19,
+     "text": "Quantization makes the model 4× smaller — with no loss in accuracy:"
+    },
+    {
+     "s": 6.24,
+     "e": 13.08,
+     "text": "macro-F1 is identical to the third decimal place across 2,742 test functions."
+    },
+    {
+     "s": 13.13,
+     "e": 15.44,
+     "text": "And on an Intel Arc Pro B70,"
+    },
+    {
+     "s": 15.49,
+     "e": 17.8,
+     "text": "we project 3–5 milliseconds per function"
+    },
+    {
+     "s": 17.85,
+     "e": 21.18,
+     "text": "10,000 findings reviewed in under half a minute."
+    }
+   ],
+   "actions": [
+    {
+     "t": 6.39,
+     "do": "next"
+    },
+    {
+     "t": 13.62,
+     "do": "next"
+    },
+    {
+     "t": 18.0,
+     "do": "next"
+    }
+   ]
+  },
+  "6": {
+   "audio": "/narration/scene_6.wav",
+   "dur": 15.3,
+   "cues": [
+    {
+     "s": 0.32,
+     "e": 1.66,
+     "text": "Semgrep on the CPU."
+    },
+    {
+     "s": 1.71,
+     "e": 7.24,
+     "text": "CodeBERT and the fix-writing model sharing a single 32 GB Arc Pro B70."
+    },
+    {
+     "s": 7.29,
+     "e": 11.42,
+     "text": "The whole pipeline, in a single ASUS workstation."
+    },
+    {
+     "s": 11.47,
+     "e": 13.51,
+     "text": "Your code never leaves."
+    },
+    {
+     "s": 13.56,
+     "e": 15.3,
+     "text": "Your vulnerabilities do."
+    }
+   ],
+   "actions": []
+  }
+ }
+}

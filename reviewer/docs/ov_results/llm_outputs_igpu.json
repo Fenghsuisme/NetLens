@@ -1,0 +1,46 @@
+{
+ "model": "qwen2.5-coder-3b-int4-ov",
+ "device": "GPU.0",
+ "load_s": 9.3,
+ "results": [
+  {
+   "id": "F1",
+   "category": "SQL Injection (CWE-89)",
+   "device": "GPU.0",
+   "ttft_ms": 1366.3,
+   "tpot_ms": 69.5,
+   "tokens_per_s": 14.4,
+   "input_tokens": 279,
+   "output_tokens": 177,
+   "total_s": 13.6,
+   "output": "### Explanation\nThe vulnerability is SQL Injection. An attacker could send a malicious input for the `invoice_id` parameter, which could be used to execute arbitrary SQL commands. For example, an attacker could send `invoice_id=' OR 1=1--` which would return all records from the `invoices` table.\nThe impact is that the attacker could potentially retrieve all records from the `invoices` table, which could be sensitive information.\n\n### Fixed code\n```python\nimport sqlite3\nfrom flask import request, jsonify\n\ndef get_invoice():\n    invoice_id = request.args.get('id', '')\n    conn = sqlite3.connect('invoices.db')\n    cursor = conn.cursor()\n    query = \"SELECT * FROM invoices WHERE invoice_id = ?\"\n    cursor.execute(query, (invoice_id,))\n    result = cursor.fetchall()\n    conn.close()\n    return jsonify(result)\n```",
+   "diff": "--- a/billing/invoices.py\n+++ b/billing/invoices.py\n@@ -5,8 +5,8 @@\n     invoice_id = request.args.get('id', '')\n     conn = sqlite3.connect('invoices.db')\n     cursor = conn.cursor()\n-    query = \"SELECT * FROM invoices WHERE invoice_id = '\" + invoice_id + \"'\"\n-    cursor.execute(query)\n+    query = \"SELECT * FROM invoices WHERE invoice_id = ?\"\n+    cursor.execute(query, (invoice_id,))\n     result = cursor.fetchall()\n     conn.close()\n     return jsonify(result)\n"
+  },
+  {
+   "id": "F2",
+   "category": "OS Command Injection (CWE-78)",
+   "device": "GPU.0",
+   "ttft_ms": 1214.5,
+   "tpot_ms": 69.8,
+   "tokens_per_s": 14.3,
+   "input_tokens": 298,
+   "output_tokens": 173,
+   "total_s": 13.22,
+   "output": "### Explanation\nThe vulnerability is an OS Command Injection (CWE-78). An attacker could send a malicious username that includes shell metacharacters, such as `;`, `&&`, or `|`, which would allow the attacker to execute arbitrary shell commands. For example, an attacker could send `; rm -rf /` to delete all files on the system.\n\n### Fixed code\n```javascript\nconst { execFile } = require('child_process');\n\nfunction deleteUserAccount(username) {\n  const command = 'userdel';\n  const args = ['-r', username];\n  execFile(command, args, (error, stdout, stderr) => {\n    if (error) {\n      console.error(`Failed to delete user: ${error.message}`);\n      return;\n    }\n    console.log(`Account deleted: ${username}`);\n  });\n}\n```",
+   "diff": "--- a/admin/users.js\n+++ b/admin/users.js\n@@ -1,8 +1,9 @@\n-const { exec } = require('child_process');\n+const { execFile } = require('child_process');\n \n function deleteUserAccount(username) {\n-  const command = `userdel -r ${username}`;\n-  exec(command, (error, stdout, stderr) => {\n+  const command = 'userdel';\n+  const args = ['-r', username];\n+  execFile(command, args, (error, stdout, stderr) => {\n     if (error) {\n       console.error(`Failed to delete user: ${error.message}`);\n       return;\n"
+  },
+  {
+   "id": "F3",
+   "category": "Insecure Deserialization (CWE-502)",
+   "device": "GPU.0",
+   "ttft_ms": 1484.6,
+   "tpot_ms": 69.8,
+   "tokens_per_s": 14.3,
+   "input_tokens": 312,
+   "output_tokens": 262,
+   "total_s": 19.71,
+   "output": "### Explanation\nThe vulnerability in the code is insecure deserialization, specifically using `ObjectInputStream` to deserialize untrusted bytes. This can lead to arbitrary code execution if the deserialized object contains malicious code. A malicious attacker could send a crafted byte array that contains a malicious object, which would be executed when the `readObject()` method is called.\n\n### Fixed code\n```java\nimport java.io.*;\n\npublic class InvoiceService {\n    public Invoice processInvoice(byte[] invoiceBytes) throws IOException, ClassNotFoundException {\n        ByteArrayInputStream bis = new ByteArrayInputStream(invoiceBytes);\n        ObjectInputStream ois = new ObjectInputStream(bis);\n        ois.setObjectInputFilter(new ObjectInputFilter() {\n            public boolean isAllowed(ObjectStreamClass desc) {\n                // Allow only the expected application classes\n                return desc.getName().equals(\"com.example.Invoice\");\n            }\n        });\n        Invoice invoice = (Invoice) ois.readObject();\n        ois.close();\n        invoice.calculateTotal();\n        invoice.applyDiscounts();\n        return invoice;\n    }\n}\n```\n\nIn the fixed code, an `ObjectInputFilter` is installed on the `ObjectInputStream` to allow only the `com.example.Invoice` class to be deserialized. This prevents arbitrary code execution and adheres to the company's secure-coding guideline.",
+   "diff": "--- a/src/main/java/billing/InvoiceService.java\n+++ b/src/main/java/billing/InvoiceService.java\n@@ -4,6 +4,12 @@\n     public Invoice processInvoice(byte[] invoiceBytes) throws IOException, ClassNotFoundException {\n         ByteArrayInputStream bis = new ByteArrayInputStream(invoiceBytes);\n         ObjectInputStream ois = new ObjectInputStream(bis);\n+        ois.setObjectInputFilter(new ObjectInputFilter() {\n+            public boolean isAllowed(ObjectStreamClass desc) {\n+                // Allow only the expected application classes\n+                return desc.getName().equals(\"com.example.Invoice\");\n+            }\n+        });\n         Invoice invoice = (Invoice) ois.readObject();\n         ois.close();\n         invoice.calculateTotal();\n"
+  }
+ ]
+}

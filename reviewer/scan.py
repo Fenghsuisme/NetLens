@@ -23,6 +23,8 @@ scan.py — NetLens Reviewer 完整掃描管道
     python scan.py file.py --json           輸出 JSON（供程式介接）
     python scan.py file.py --no-model       只跑 Semgrep（不載入模型，快）
     python scan.py file.py --show-snippet   顯示片段內容
+    python scan.py file.py --backend openvino [--ov-device GPU]
+                                            CodeBERT 改走 OpenVINO INT8（Intel CPU/GPU）
 
 設計說明：
     v6_2 訓練時已剝除註解，故推論時亦剝除以維持條件一致。
@@ -58,6 +60,7 @@ from label_map import config_to_model, MODEL_LABEL_NAMES
 
 # ── 設定 ──────────────────────────────────────────
 MODEL_DIR = "models/codebert_v7v8_safe"
+OV_MODEL_DIR = "models/codebert_ov_int8"   # scripts/ov/ov_export.py 產出（--backend openvino）
 BASE_MODEL = "microsoft/codebert-base"
 
 # ── 前處理設定：必須與訓練條件一致 ──
@@ -152,8 +155,11 @@ def _resolve_model(model_dir):
 
 
 class Scanner:
-    def __init__(self, use_model=True, with_official=True):
+    def __init__(self, use_model=True, with_official=True,
+                 backend="pytorch", ov_device="CPU"):
         self.model = None
+        self.backend = backend
+        self.ov_device = ov_device
         self.tok = None
         self.device = None
         self.model_path = None
@@ -162,6 +168,15 @@ class Scanner:
             self._load_model()
 
     def _load_model(self):
+        if self.backend == "openvino":
+            from transformers import AutoTokenizer
+            from core.ov_backend import OVCodeBERT
+            self.model = OVCodeBERT(OV_MODEL_DIR, self.ov_device)
+            self.tok = AutoTokenizer.from_pretrained(BASE_MODEL)
+            self.device = f"OpenVINO {self.ov_device}（{self.model.device}）"
+            self.model_path = OV_MODEL_DIR
+            self.model_kind = "OpenVINO IR"
+            return
         path, kind = _resolve_model(MODEL_DIR)
         if path is None:
             raise RuntimeError(
@@ -187,6 +202,12 @@ class Scanner:
             code = obfuscate_functions(code, language)
         if len(code) < 10:
             code = snippet
+        if self.backend == "openvino":
+            enc = self.tok(code[:2000], max_length=512, padding="max_length",
+                           truncation=True, return_tensors="np")
+            probs = self.model.predict_proba(enc)[0]
+            label = int(probs.argmax())
+            return label, LABEL_NAMES.get(label, str(label)), float(probs[label])
         enc = self.tok(code[:2000], max_length=512, padding="max_length",
                        truncation=True, return_tensors="pt").to(self.device)
         with self.torch.no_grad():
@@ -381,6 +402,10 @@ def main():
     ap.add_argument("--no-official", action="store_true",
                     help="不載入官方規則 p/security-audit（離線環境用）")
     ap.add_argument("--out", help="將 JSON 結果寫入檔案")
+    ap.add_argument("--backend", choices=["pytorch", "openvino"], default="pytorch",
+                    help="CodeBERT 推論後端（openvino＝Intel CPU/GPU 上的 INT8 IR）")
+    ap.add_argument("--ov-device", default="CPU",
+                    help="OpenVINO 裝置：CPU / GPU / GPU.0 / AUTO（搭配 --backend openvino）")
     args = ap.parse_args()
 
     if not os.path.exists(args.path):
@@ -398,7 +423,8 @@ def main():
     t0 = time.time()
     try:
         scanner = Scanner(use_model=not args.no_model,
-                          with_official=not args.no_official)
+                          with_official=not args.no_official,
+                          backend=args.backend, ov_device=args.ov_device)
     except RuntimeError as e:
         print(f"❌ {e}")
         return 1

@@ -1,0 +1,203 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NetLens Command Center</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="viewport">
+<div id="stage">
+  <div class="bg-grid"></div>
+  <div class="bg-glow"></div>
+
+  <!-- ─────────── HUD ─────────── -->
+  <header id="hud">
+    <div class="brand"><svg class="logo-svg" viewBox="0 0 64 64" aria-hidden="true"><defs><linearGradient id="lgs" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#5ec8ff"/></linearGradient></defs><circle cx="27" cy="27" r="19" fill="rgba(94,200,255,.08)" stroke="url(#lgs)" stroke-width="5"/><path d="M41 41 L57 57" stroke="#5ec8ff" stroke-width="8" stroke-linecap="round"/><path d="M21 19 L14 27 L21 35 M33 19 L40 27 L33 35" fill="none" stroke="#5ec8ff" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/></svg>NETLENS <b>COMMAND CENTER</b></div>
+    <div class="hud-right">
+      <span id="hud-mode" class="pill">●  CONNECTING</span>
+      <span id="hud-hw" class="hud-hw">—</span>
+    </div>
+  </header>
+
+  <!-- ─────────── 1 · HOOK ─────────── -->
+  <section class="scene" id="s1">
+    <div class="flood" id="flood"></div>
+    <div class="hook-center">
+      <div class="hook-count"><span id="flood-count">0</span><small>rule-engine alerts · 10 open-source projects</small></div>
+      <h1 class="hook-line" id="hook-1">Static analysis buries your team in alerts.</h1>
+      <h1 class="hook-line" id="hook-2">Most of them are <em>noise</em>.</h1>
+      <h1 class="hook-line" id="hook-3">And your source code <em>can't leave the building</em>.</h1>
+    </div>
+    <div class="title-card" id="title-card">
+      <div class="logo-big"><svg class="logo-svg big" viewBox="0 0 64 64" aria-hidden="true"><defs><linearGradient id="lgb" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#5ec8ff"/></linearGradient></defs><circle cx="27" cy="27" r="19" fill="rgba(94,200,255,.08)" stroke="url(#lgb)" stroke-width="5"/><path d="M41 41 L57 57" stroke="#5ec8ff" stroke-width="8" stroke-linecap="round"/><path d="M21 19 L14 27 L21 35 M33 19 L40 27 L33 35" fill="none" stroke="#5ec8ff" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+      <h1>NetLens</h1>
+      <p>The on-prem AI security gateway</p>
+      <p class="sub">Semgrep × CodeBERT × local LLM — running on Intel with OpenVINO™</p>
+    </div>
+  </section>
+
+  <!-- ─────────── 2 · FUNNEL ─────────── -->
+  <section class="scene" id="s2">
+    <div class="scene-title"><span class="step">01</span>Two-stage detection on a real open-source project
+      <span class="scene-sub" id="fn-project">—</span></div>
+    <div class="funnel">
+      <div class="fn-col">
+        <div class="fn-head"><span class="dot dot-alert"></span>Stage 1 · Semgrep rules <small>high recall</small></div>
+        <div class="fn-stream" id="fn-stream"></div>
+      </div>
+      <div class="fn-mid">
+        <div class="fn-chip">CodeBERT<br><small>17-class · INT8<br>OpenVINO</small></div>
+        <div class="fn-beam"></div>
+      </div>
+      <div class="fn-col fn-out">
+        <div class="fn-bin bin-confirmed">
+          <div class="fn-head"><span class="ico">⬢</span>Confirmed vulnerability <b id="c-confirmed">0</b></div>
+          <div class="bin-list" id="bin-confirmed"></div>
+        </div>
+        <div class="fn-bin bin-disputed">
+          <div class="fn-head"><span class="ico">◆</span>Needs review <b id="c-disputed">0</b></div>
+          <div class="bin-list" id="bin-disputed"></div>
+        </div>
+        <div class="fn-bin bin-filtered">
+          <div class="fn-head"><span class="ico">✕</span>False positive removed <b id="c-filtered">0</b></div>
+          <div class="bin-list" id="bin-filtered"></div>
+        </div>
+      </div>
+    </div>
+    <div class="fn-stats">
+      <div class="stat"><div class="k">Raw alerts</div><div class="v" id="st-raw">0</div></div>
+      <div class="stat"><div class="k">Noise removed by the model</div><div class="v accent" id="st-removed">0%</div></div>
+      <div class="stat"><div class="k">Alerts / KLOC  raw → shown</div><div class="v" id="st-kloc">—</div></div>
+      <div class="stat wide"><div class="k">Benchmark · 10 OSS projects · 640K LOC</div><div class="v">3.6 → 0.56 <small>alerts/KLOC · −84%</small></div></div>
+    </div>
+  </section>
+
+  <!-- ─────────── 3 · RACE ─────────── -->
+  <section class="scene" id="s3">
+    <div class="scene-title"><span class="step">02</span>Same model, same 152 functions — different engine
+      <span class="scene-sub" id="race-note">—</span></div>
+    <div class="race" id="race"></div>
+    <div class="telemetry" id="telemetry">
+      <div class="tl-head">
+        <span>LIVE HARDWARE TELEMETRY</span>
+        <span class="legend"><i class="sw sw-gpu"></i>Intel GPU <b id="tl-gpu">0%</b></span>
+        <span class="legend"><i class="sw sw-cpu"></i>CPU <b id="tl-cpu">0%</b></span>
+        <span class="tl-src">Windows performance counters · same source as Task Manager</span>
+      </div>
+      <canvas id="tl-canvas" width="1780" height="120"></canvas>
+    </div>
+    <div class="race-legend"><span><i class="tile vuln"></i>classified as vulnerable</span><span><i class="tile benign"></i>classified as benign</span></div>
+    <div class="race-hint" id="race-hint">press <kbd>Enter</kbd> to start</div>
+  </section>
+
+  <!-- ─────────── 4 · LLM ─────────── -->
+  <section class="scene" id="s4">
+    <div class="scene-title"><span class="step">03</span>Local LLM explains and fixes — on the same Intel GPU
+      <span class="scene-sub">0 bytes of source code sent to the cloud</span></div>
+    <div class="llm">
+      <div class="panel code-panel">
+        <div class="panel-head">
+          <span class="file" id="llm-file">—</span>
+          <span class="chips" id="llm-chips"></span>
+        </div>
+        <pre class="code" id="llm-code"></pre>
+      </div>
+      <div class="panel agent-panel">
+        <div class="panel-head">
+          <span class="agent-name"><span class="pulse"></span>NetLens Fix Agent</span>
+          <span class="chips"><span class="chip">Qwen2.5-Coder-3B · INT4</span><span class="chip chip-hw">Intel GPU · OpenVINO GenAI</span></span>
+        </div>
+        <div class="agent-out" id="llm-out"></div>
+        <div class="diff-wrap" id="llm-diff-wrap">
+          <div class="diff-title">Proposed patch</div>
+          <pre class="diff" id="llm-diff"></pre>
+        </div>
+      </div>
+    </div>
+    <div class="llm-stats">
+      <div class="stat"><div class="k">Time to first token</div><div class="v" id="llm-ttft">—</div></div>
+      <div class="stat"><div class="k">Generation speed</div><div class="v accent" id="llm-tps">—</div></div>
+      <div class="stat"><div class="k">Tokens</div><div class="v" id="llm-tok">—</div></div>
+      <div class="stat"><div class="k">Intel GPU load</div><div class="v" id="llm-gpu">—</div></div>
+      <div class="stat"><div class="k">Data sent to cloud</div><div class="v good">0 bytes</div></div>
+    </div>
+    <div class="race-hint" id="llm-hint">← → choose finding · <kbd>Enter</kbd> run</div>
+  </section>
+
+  <!-- ─────────── 5 · NUMBERS ─────────── -->
+  <section class="scene" id="s5">
+    <div class="cards" id="cards">
+      <div class="card" data-card="0">
+        <div class="card-kicker">INT8 quantization · NNCF</div>
+        <div class="hero"><span class="count" data-to="3.9" data-dec="1">0</span>× <span class="hero-unit">smaller model</span></div>
+        <div class="shrink">
+          <div class="shrink-row"><span class="lbl">PyTorch FP32</span><div class="shrink-bar base" style="--w:100%"></div><span class="val">476 MB</span></div>
+          <div class="shrink-row"><span class="lbl">OpenVINO INT8</span><div class="shrink-bar ov" style="--w:25.4%"></div><span class="val">121 MB</span></div>
+        </div>
+      </div>
+      <div class="card" data-card="1">
+        <div class="card-kicker">Does quantization hurt accuracy?</div>
+        <div class="hero">Macro-F1 <span class="count" data-from="0.7159" data-to="0.7160" data-dec="4">0.7159</span></div>
+        <div class="acc-row">
+          <div class="acc-item"><b>2,742</b><span>labeled test functions</span></div>
+          <div class="acc-item"><b>±1.4 pp</b><span>max change, any of 17 classes</span></div>
+          <div class="acc-item"><b>99.3%</b><span>identical verdicts end-to-end</span></div>
+        </div>
+        <div class="verdict-big">Accuracy: <span class="good">unchanged</span></div>
+      </div>
+      <div class="card" data-card="2">
+        <div class="card-kicker">Latency per function · 512 tokens · lower is better</div>
+        <div class="bars" id="lat-bars"></div>
+        <div class="foot">Measured on Intel Core 5 210H laptop · Arc Pro B70 bar is a projection from 367 INT8 TOPS, not a measurement</div>
+      </div>
+      <div class="card" data-card="3">
+        <div class="card-kicker">Reviewing 10,000 findings</div>
+        <div class="split">
+          <div class="split-item"><div class="k">PyTorch · laptop CPU</div><div class="big muted">~55 min</div></div>
+          <div class="split-arrow">→</div>
+          <div class="split-item"><div class="k">OpenVINO INT8 · laptop CPU</div><div class="big accent">~14 min</div></div>
+          <div class="split-arrow">→</div>
+          <div class="split-item projected"><div class="k">Arc Pro B70 · INT8 <span class="proj-tag">PROJECTED</span></div><div class="big violet">~11–25 s</div></div>
+        </div>
+        <div class="foot">Laptop numbers measured (3.0 vs 11.8 functions/s). B70: 96.6 GOP per function ÷ (367 TOPS × 10–25% utilization) — an estimate to be verified on hardware.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─────────── 6 · ARCHITECTURE ─────────── -->
+  <section class="scene" id="s6">
+    <div class="arch">
+      <div class="cloud"><svg viewBox="0 0 220 140"><path d="M60 110h110a35 35 0 0 0 0-70 50 50 0 0 0-95-10A40 40 0 0 0 60 110z" fill="none" stroke="currentColor" stroke-width="5"/><path d="M75 30l80 80M155 30l-80 80" stroke="#d03b3b" stroke-width="9" stroke-linecap="round"/></svg><span>Public cloud AI</span></div>
+      <div class="ws">
+        <div class="ws-label">ASUS workstation · on-prem</div>
+        <div class="ws-in">
+          <div class="src">Your source code<div class="files"><i></i><i></i><i></i><i></i></div></div>
+          <div class="flow"><span></span><span></span><span></span></div>
+          <div class="chip-box cpu"><div class="chip-t">Intel CPU</div><div class="chip-job">Semgrep · rule-based candidate selection</div></div>
+          <div class="flow"><span></span><span></span><span></span></div>
+          <div class="chip-box gpu">
+            <div class="chip-t">Intel Arc Pro B70 · 32 GB</div>
+            <div class="chip-job">CodeBERT INT8 · OpenVINO — confirm / filter</div>
+            <div class="chip-job">Code LLM INT4 · OpenVINO GenAI — explain / fix</div>
+            <div class="mem"><div class="mem-seg a" style="--w:3%"></div><div class="mem-seg b" style="--w:15%"></div><div class="mem-free"><i class="mk a"></i>CodeBERT <i class="mk b"></i>Code LLM · &gt; 20 GB free</div></div>
+          </div>
+          <div class="flow"><span></span><span></span><span></span></div>
+          <div class="out">Report + patch<br><small>pull-request comment</small></div>
+        </div>
+      </div>
+      <div class="slogan">Your code never leaves. <em>Your vulnerabilities do.</em></div>
+      <div class="stack-line">Semgrep · CodeBERT · OpenVINO™ · NNCF · OpenVINO GenAI · Intel® Arc™ Pro</div>
+    </div>
+  </section>
+
+  <div id="caption"></div>
+  <nav id="dots"></nav>
+</div>
+</div>
+<script src="app.js"></script>
+</body>
+</html>
