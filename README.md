@@ -5,221 +5,104 @@
 
 🎬 **Demo 影片**：https://youtu.be/BQLh9FSQCBY
 
+---
+
+## 要解決的問題
+
+靜態掃描工具會產生大量告警，其中多數是誤報；開發者被淹沒後乾脆不看，真正的漏洞因此漏掉。
+AI 能幫忙判斷，但對金融、醫療、製造業而言，把私有原始碼上傳到雲端 AI 並不可行。
+
+NetLens 把整條「偵測 → 判定 → 修復建議」管道放在**一台企業內部的工作站**上完成。
+
 ## 運作方式
 
+![NetLens Reviewer 架構](reviewer/docs/architecture_diagram.png)
+
 ```
-原始碼 ──► Semgrep 規則選點（Intel CPU，高召回）
-       ──► CodeBERT 17 類判定，濾掉誤報（OpenVINO INT8，Intel CPU / GPU）
-       ──► 本地 Code LLM 解釋漏洞並產生修補（OpenVINO GenAI INT4，同一張 Intel GPU）
+原始碼 ──► ① Semgrep 規則選點（Intel CPU，高召回）
+       ──► ② CodeBERT 17 類判定，濾掉誤報（OpenVINO INT8，Intel CPU / GPU）
+       ──► ③ 本地 Code LLM 解釋漏洞並產生修補（OpenVINO GenAI INT4，同一張 Intel GPU）
        ──► 掃描報告 + 修補建議
 ```
 
-## 關鍵數據
+- **Semgrep**：自訂規則 + 補強規則，負責「找得全」，並由傳輸層抽出漏洞所在的完整函式。
+- **CodeBERT**（microsoft/codebert-base 微調，~125M 參數，17 類 = 16 種 CWE + 正常）：負責「判得準」，
+  與 Semgrep 判定一致者列為確認漏洞、判為正常者過濾為誤報。
+- **本地 LLM**：對確認的漏洞產生攻擊情境說明與修補 diff，全程不連外。
+- 支援語言：Python、JavaScript、PHP、Java。
+
+## 成果
+
+### 偵測品質（10 個開源專案、64 萬行程式碼）
+
+![誤報密度下降](reviewer/docs/chart_fp_density.png)
+
+| 指標 | 結果 |
+|---|---|
+| 誤報密度 | 3.6 → 0.56 alerts/KLOC（−84%；其中模型過濾 −71%） |
+| 端到端召回 | 75.3%（Semgrep 選點天花板 88.7%） |
+| 降噪誤殺率 | 8.9% |
+
+![逐類別召回提升](reviewer/docs/chart_recall.png)
+
+### 在 Intel 硬體上的部署（OpenVINO）
 
 | 項目 | 結果 |
 |---|---|
-| 誤報密度（10 個開源專案、64 萬行） | 3.6 → 0.56 alerts/KLOC（−84%） |
 | INT8 量化後模型大小 | 476 MB → 121 MB（3.9× 小） |
 | 量化後準確率（2,742 筆測試函式） | macro-F1 0.7159 → 0.7160（逐類別變化 ≤ ±1.4pp） |
+| 端到端判定一致率（PyTorch vs OpenVINO INT8） | 99.3%（274 個 finding 中 272 個相同） |
 | Intel CPU 吞吐（同一顆晶片） | PyTorch 3.0 → OpenVINO INT8 11.8 函式/秒（3.9×） |
 | Intel 內顯延遲 | 93 ms / 函式 |
 | 本地 LLM（Qwen2.5-Coder-3B INT4 @ Intel 內顯） | ~15 tokens/s，0 bytes 上雲 |
-| Intel Arc Pro B70（**估算**，367 INT8 TOPS） | ~3–5 ms / 函式 |
+| Intel Arc Pro B70（**估算**，367 INT8 TOPS） | ~3–5 ms / 函式；CodeBERT 與 LLM 共用一張 32 GB 卡 |
 
 實測平台：Intel Core 5 210H 筆電。完整方法、數據與重現步驟見
 **[reviewer/docs/hardware_openvino_report.md](reviewer/docs/hardware_openvino_report.md)**。
 
 ## 快速開始
 
-需要已訓練的 CodeBERT 權重 `reviewer/models/codebert_v7v8_safe/`（未隨 repo 公開）。
-
 ```bash
+pip install -r requirements.txt
 cd reviewer
-python scripts/ov/ov_export.py                                   # 匯出 OpenVINO IR + INT8 量化
-python scan.py path/to/project/ --backend openvino               # Intel CPU
-python scan.py path/to/project/ --backend openvino --ov-device GPU   # Intel GPU
+
+python scan.py path/to/project/                     # PyTorch（預設）
+python scan.py path/to/project/ --json --out r.json # 輸出 JSON
+python scan.py path/to/project/ --no-model          # 只跑 Semgrep 規則
 ```
 
-Demo 展示介面（影片中的 Command Center）：見 **[reviewer/demo_console/README.md](reviewer/demo_console/README.md)**。
+需要已訓練的 CodeBERT 權重 `reviewer/models/codebert_v7v8_safe/`（未隨 repo 公開）。
 
----
+**在 Intel CPU / GPU 上用 OpenVINO 執行：**
 
-## 其他模組：AI 圖片真偽鑑識（detection/）
-
-> 在 AI 生成內容氾濫的時代，NetLens 幫你驗證網路圖片的真偽。
-
----
-
-## 專題簡介
-
-NetLens 是一個 AI 圖片真偽鑑識系統，目標是成為瀏覽器擴充套件，讓使用者在瀏覽網頁時能即時分析圖片是否由 AI 生成。
-
-目前開發中的模塊：
-
-| 模塊 | 說明 | 狀態 |
-|------|------|------|
-| `detection/` | AI 圖片偵測（EfficientNet-B4） | ✅ 開發中 |
-| `security/` | 資安威脅偵測（釣魚連結、郵件分析） | 🔜 待開發 |
-| `watermark/` | C2PA 護照 + 隱寫浮水印 | 🔜 待開發 |
-| `api/` | FastAPI 後端 + 系統整合 | 🔜 待開發 |
-
----
-
-## 目前成果（detection 模塊）
-
-### 模型表現
-
-| 測試類別 | 準確率 | 平均 AI 分數 |
-|----------|--------|--------------|
-| Kaggle 真實照片（訓練內） | 98.2% | 0.0201 |
-| Kaggle AI 生成（SD/MJ 風格，訓練內） | 99.2% | 0.9908 |
-| StyleGAN 140k test set（訓練內） | 100.0% | 0.9999 |
-| StyleGAN thispersondoesnotexist（訓練外） | 40.0% | 0.4057 |
-
-> 訓練資料：64,000 張（Kaggle AI vs Human + 140k Real and Fake Faces）
-> 模型：EfficientNet-B4 fine-tune，解凍 blocks.5 + blocks.6 + conv_head + classifier
-> 最佳驗證準確率：**99.6%**
-
-### 分析功能
-
-- **EfficientNet 分類**：輸出 AI 生成機率（0–100%）
-- **GradCAM 熱力圖**：視覺化模型關注的可疑區域
-- **ELA 分析**：壓縮差異檢測，找出竄改痕跡
-- **FFT 頻譜分析**：頻率分布視覺化，輔助判斷 GAN artifact
-- **URL 直接分析**：貼上圖片網址即可分析，不需下載
-
----
+```bash
+python scripts/ov/ov_export.py                                     # 匯出 OpenVINO IR + INT8 量化
+python scan.py path/to/project/ --backend openvino                 # Intel CPU
+python scan.py path/to/project/ --backend openvino --ov-device GPU # Intel GPU
+```
 
 ## 專案結構
 
 ```
-CSIE_Project/
-└── NetLens/
-    ├── detection/
-    │   ├── models/                     # 模型權重（不推上 GitHub）
-    │   ├── test_images/
-    │   │   ├── real/                   # 測試用真實照片
-    │   │   ├── fake/                   # 測試用 AI 生成圖
-    │   │   └── stylegan/               # StyleGAN 專用測試圖
-    │   ├── dataset/                    # 訓練資料集（不推上 GitHub）
-    │   ├── dataset_v2/                 # 擴充訓練資料集（不推上 GitHub）
-    │   ├── outputs/                    # 分析結果輸出
-    │   │   └── counter.json            # 分析次數計數器
-    │   ├── detector.py                 # 核心偵測程式
-    │   ├── train.py                    # Fine-tune 訓練腳本
-    │   ├── prepare_dataset.py          # 資料集整理（Kaggle）
-    │   ├── prepare_dataset_v2.py       # 資料集整理（Kaggle + StyleGAN）
-    │   ├── download_dataset.py         # Kaggle 資料集下載
-    │   ├── download_stylegan.py        # StyleGAN 140k 資料集下載
-    │   ├── download_FF.py              # FaceForensics++ 下載（待使用）
-    │   ├── evaluate.py                 # 跨生成器評估
-    │   └── visualize_results.py        # 評估結果視覺化
-    ├── security/                       # 待開發
-    ├── watermark/                      # 待開發
-    ├── api/                            # 待開發
-    └── app.py                          # Gradio 展示介面
+reviewer/
+├── scan.py                 # 完整掃描管道（Semgrep → CodeBERT → 融合分級）
+├── transport_layer.py      # Semgrep 執行、依 CWE 分流、抽取所在函式
+├── core/                   # 類別設定、融合邏輯、OpenVINO 推論後端（ov_backend.py）
+├── rules/                  # Semgrep 自訂規則
+├── config/                 # 漏洞類別定義（vuln_categories.json）
+├── training/               # 資料整合與 CodeBERT 訓練
+├── eval/                   # 評估腳本
+├── scripts/ov/             # OpenVINO 匯出、量化、benchmark、準確率評估、本地 LLM 修復
+├── demo_console/           # Demo 影片中的 Command Center 展示介面
+└── docs/                   # 架構圖、數據圖、硬體部署報告
 ```
 
----
+## 文件
 
-## 安裝與執行
+- [硬體部署報告（OpenVINO / Intel）](reviewer/docs/hardware_openvino_report.md)
+- [Demo 展示介面與影片製作](reviewer/demo_console/README.md)
+- [Semgrep 規則說明](reviewer/rules/README.md)
 
-### 環境需求
+## 授權
 
-- Python 3.11
-- CUDA 12.x（建議使用 NVIDIA GPU）
-- conda（建議使用 miniconda）
-
-### 第一步：建立 conda 環境
-
-```bash
-conda create -n CSIE_Project python=3.11
-conda activate CSIE_Project
-```
-
-### 第二步：安裝 PyTorch（CUDA 版本）
-
-```bash
-conda install pytorch torchvision torchaudio pytorch-cuda=12.1 -c pytorch -c nvidia -y
-```
-
-### 第三步：安裝其他套件
-
-```bash
-pip install timm gradio opencv-python matplotlib pillow grad-cam requests pandas kagglehub
-```
-
-### 第四步：下載模型權重
-
-模型權重因為檔案太大不放在 GitHub， `netlens_detector_v3.pth`在
-```
-https://drive.google.com/drive/folders/1eV5DG5dza-WBVeQS3RyzFR6Dj9wAHF3W?usp=sharing
-```
-
-放到以下路徑：
-```
-detection/models/netlens_detector_v3.pth
-```
-
-### 第五步：啟動 Gradio 介面
-
-```bash
-cd NetLens
-python app.py
-```
-
-開啟瀏覽器進入 `http://127.0.0.1:7860` 即可使用。
-
----
-
-## 主要腳本說明
-
-| 腳本 | 用途 | 執行指令 |
-|------|------|----------|
-| `app.py` | 啟動 Gradio 展示介面 | `python app.py` |
-| `detection/detector.py` | 批次分析 test_images 資料夾 | `python detection/detector.py` |
-| `detection/train.py` | 重新訓練模型 | `python detection/train.py` |
-| `detection/evaluate.py` | 跨生成器評估 | `python detection/evaluate.py` |
-| `detection/prepare_dataset_v2.py` | 準備訓練資料集 | `python detection/prepare_dataset_v2.py` |
-| `detection/visualize_results.py` | 產生評估圖表 | `python detection/visualize_results.py` |
-
----
-
-## 已知問題
-
-| 問題 | 原因 | 狀態 |
-|------|------|------|
-| 高品質 StyleGAN（thispersondoesnotexist.com）辨識率 40% | 後處理消除了 GAN artifact | 研究中，待加入更多訓練資料 |
-| 社交平台圖片 URL 無法直接分析 | 防盜鏈保護（400/403） | 待瀏覽器套件解決 |
-| PNG 圖片 ELA 效果較差 | ELA 設計給 JPEG，PNG 格式轉換產生噪音 | ✅ 已透過自動轉換 JPEG 改善 |
-
----
-
-## 開發進度
-
-- [x] detection 模塊核心偵測功能
-- [x] EfficientNet-B4 fine-tune（99.6% 驗證準確率）
-- [x] GradCAM 熱力圖
-- [x] ELA 壓縮差異分析
-- [x] FFT 頻域分析
-- [x] Gradio 展示介面
-- [x] URL 直接分析
-- [x] StyleGAN 跨生成器評估實驗
-- [ ] security 模塊（釣魚連結、郵件分析）
-- [ ] watermark 模塊（C2PA、隱寫浮水印）
-- [ ] 瀏覽器擴充套件
-- [ ] FastAPI 後端整合
-- [ ] FaceForensics++ 資料集整合
-
----
-
-## 技術選型
-
-| 項目 | 技術 |
-|------|------|
-| 主模型 | EfficientNet-B4（timm） |
-| 訓練框架 | PyTorch 2.5.1 |
-| 視覺化 | GradCAM、OpenCV、Matplotlib |
-| 展示介面 | Gradio 6.14.0 |
-| 後端（規劃中） | FastAPI |
-| 訓練資料集 | Kaggle AI vs Human Generated + 140k Real and Fake Faces |
+見 [LICENSE](LICENSE)。
