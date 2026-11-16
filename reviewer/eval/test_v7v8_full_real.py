@@ -405,11 +405,8 @@ def main():
     # 載入模型
     # --------------------------------------------------------
 
-    device = torch.device(
-        "cuda"
-        if torch.cuda.is_available()
-        else "cpu"
-    )
+    from core.device import pick_device
+    device = pick_device()
 
     print("\n" + "=" * 72)
     print("載入 v7v8 CodeBERT")

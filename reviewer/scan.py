@@ -185,7 +185,8 @@ class Scanner:
         import torch
         from transformers import AutoTokenizer, AutoModelForSequenceClassification
         self.torch = torch
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        from core.device import pick_device
+        self.device = pick_device()
         self.tok = AutoTokenizer.from_pretrained(BASE_MODEL)
         self.model = AutoModelForSequenceClassification.from_pretrained(path)
         self.model.to(self.device)

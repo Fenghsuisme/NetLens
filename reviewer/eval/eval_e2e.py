@@ -318,7 +318,8 @@ def main():
         return 1
     import torch
     from transformers import AutoTokenizer, AutoModelForSequenceClassification
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    from core.device import pick_device
+    device = pick_device()
     tok = AutoTokenizer.from_pretrained(BASE_MODEL)
     model = AutoModelForSequenceClassification.from_pretrained(path).to(device)
     model.eval()
