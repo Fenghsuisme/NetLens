@@ -1,0 +1,46 @@
+{
+ "model": "Qwen/Qwen3-14B",
+ "device": "vllm@http://localhost:8000/v1",
+ "load_s": null,
+ "results": [
+  {
+   "id": "F1",
+   "category": "SQL Injection (CWE-89)",
+   "device": "vllm@http://localhost:8000/v1",
+   "ttft_ms": 248.2,
+   "tpot_ms": 30.8,
+   "tokens_per_s": 32.5,
+   "input_tokens": 283,
+   "output_tokens": 159,
+   "total_s": 5.12,
+   "output": "### Explanation\nThe code is vulnerable to SQL injection because user input is directly concatenated into the SQL query. An attacker could send a malicious `id` such as `1' OR '1'='1` to manipulate the query and potentially access unauthorized data or disrupt the database. This could lead to data leakage, data corruption, or unauthorized access.\n\n### Fixed code\n```python\nimport sqlite3\nfrom flask import request, jsonify\n\ndef get_invoice():\n    invoice_id = request.args.get('id', '')\n    conn = sqlite3.connect('invoices.db')\n    cursor = conn.cursor()\n    query = \"SELECT * FROM invoices WHERE invoice_id = ?\"\n    cursor.execute(query, (invoice_id,))\n    result = cursor.fetchall()\n    conn.close()\n    return jsonify(result)\n```",
+   "diff": "--- a/billing/invoices.py\n+++ b/billing/invoices.py\n@@ -5,8 +5,8 @@\n     invoice_id = request.args.get('id', '')\n     conn = sqlite3.connect('invoices.db')\n     cursor = conn.cursor()\n-    query = \"SELECT * FROM invoices WHERE invoice_id = '\" + invoice_id + \"'\"\n-    cursor.execute(query)\n+    query = \"SELECT * FROM invoices WHERE invoice_id = ?\"\n+    cursor.execute(query, (invoice_id,))\n     result = cursor.fetchall()\n     conn.close()\n     return jsonify(result)\n"
+  },
+  {
+   "id": "F2",
+   "category": "OS Command Injection (CWE-78)",
+   "device": "vllm@http://localhost:8000/v1",
+   "ttft_ms": 95.0,
+   "tpot_ms": 30.2,
+   "tokens_per_s": 33.1,
+   "input_tokens": 302,
+   "output_tokens": 228,
+   "total_s": 6.95,
+   "output": "### Explanation\nThis code is vulnerable to OS Command Injection (CWE-78) because it constructs a shell command string using user input (`username`) directly in a template literal. An attacker could inject arbitrary shell commands by providing a malicious `username` such as `username; rm -rf /`, which would execute unintended commands. This could lead to complete system compromise.\n\n### Fixed code\n```javascript\nconst { execFile } = require('child_process');\n\nfunction deleteUserAccount(username) {\n  // Validate username against a strict allow-list regex (e.g., alphanumeric and underscores only)\n  const usernameRegex = /^[a-zA-Z0-9_]+$/;\n  if (!usernameRegex.test(username)) {\n    throw new Error('Invalid username format');\n  }\n\n  // Use execFile with an argument array to avoid shell injection\n  execFile('userdel', ['-r', username], (error, stdout, stderr) => {\n    if (error) {\n      console.error(`Failed to delete user: ${error.message}`);\n      return;\n    }\n    console.log(`Account deleted: ${username}`);\n  });\n}\n```",
+   "diff": "--- a/admin/users.js\n+++ b/admin/users.js\n@@ -1,8 +1,14 @@\n-const { exec } = require('child_process');\n+const { execFile } = require('child_process');\n \n function deleteUserAccount(username) {\n-  const command = `userdel -r ${username}`;\n-  exec(command, (error, stdout, stderr) => {\n+  // Validate username against a strict allow-list regex (e.g., alphanumeric and underscores only)\n+  const usernameRegex = /^[a-zA-Z0-9_]+$/;\n+  if (!usernameRegex.test(username)) {\n+    throw new Error('Invalid username format');\n+  }\n+\n+  // Use execFile with an argument array to avoid shell injection\n+  execFile('userdel', ['-r', username], (error, stdout, stderr) => {\n     if (error) {\n       console.error(`Failed to delete user: ${error.message}`);\n       return;\n"
+  },
+  {
+   "id": "F3",
+   "category": "Insecure Deserialization (CWE-502)",
+   "device": "vllm@http://localhost:8000/v1",
+   "ttft_ms": 89.7,
+   "tpot_ms": 29.8,
+   "tokens_per_s": 33.5,
+   "input_tokens": 316,
+   "output_tokens": 228,
+   "total_s": 6.86,
+   "output": "### Explanation\nThe code is vulnerable to insecure deserialization (CWE-502) because it uses `ObjectInputStream.readObject()` to deserialize untrusted byte data. An attacker could craft a malicious byte stream containing a serialized object that executes arbitrary code upon deserialization, leading to remote code execution (RCE) or other security issues.\n\n### Fixed code\n```java\nimport java.io.*;\n\npublic class InvoiceService {\n    public Invoice processInvoice(byte[] invoiceBytes) throws IOException, ClassNotFoundException {\n        ByteArrayInputStream bis = new ByteArrayInputStream(invoiceBytes);\n        ObjectInputStream ois = new ObjectInputStream(bis);\n        ois.setObjectInputFilter((desc, clazz, array) -> {\n            // Allow only the expected class and its subclasses\n            if (clazz == null || clazz == Invoice.class || clazz.isAssignableFrom(Invoice.class)) {\n                return ObjectInputFilter.Status.ALLOW;\n            }\n            return ObjectInputFilter.Status.REJECT;\n        });\n        Invoice invoice = (Invoice) ois.readObject();\n        ois.close();\n        invoice.calculateTotal();\n        invoice.applyDiscounts();\n        return invoice;\n    }\n}\n```",
+   "diff": "--- a/src/main/java/billing/InvoiceService.java\n+++ b/src/main/java/billing/InvoiceService.java\n@@ -4,6 +4,13 @@\n     public Invoice processInvoice(byte[] invoiceBytes) throws IOException, ClassNotFoundException {\n         ByteArrayInputStream bis = new ByteArrayInputStream(invoiceBytes);\n         ObjectInputStream ois = new ObjectInputStream(bis);\n+        ois.setObjectInputFilter((desc, clazz, array) -> {\n+            // Allow only the expected class and its subclasses\n+            if (clazz == null || clazz == Invoice.class || clazz.isAssignableFrom(Invoice.class)) {\n+                return ObjectInputFilter.Status.ALLOW;\n+            }\n+            return ObjectInputFilter.Status.REJECT;\n+        });\n         Invoice invoice = (Invoice) ois.readObject();\n         ois.close();\n         invoice.calculateTotal();\n"
+  }
+ ]
+}

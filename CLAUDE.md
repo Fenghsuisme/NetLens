@@ -53,7 +53,7 @@ On first run, the `microsoft/codebert-base` tokenizer is downloaded from Hugging
 
 - `ov_export.py` turns the PyTorch model into FP32 and INT8 IR. It uses NNCF PTQ and calibrates on `test_code/real_test/security_training_dataset_v1.txt` plus `dataset/hard_negatives`. The export traces with TorchScript and needs `transformers<4.56`; use a separate env for it.
 - `ov_benchmark.py`, `ov_eval_accuracy.py` and `ov_eval_device.py` measure throughput and accuracy. `ov_common.py` holds the shared paths and the test-set loader.
-- `llm_demo/ov_llm_explain.py` is the local LLM explain/fix stage. It needs `openvino-genai`.
+- `llm_demo/ov_llm_explain.py` is the local LLM explain/fix stage. It needs `openvino-genai`. `llm_demo/vllm_explain.py` is the same stage against a vLLM server. Keep prompt changes in `llm_demo/llm_prompt.py` so both backends stay comparable.
 - Results are written to `docs/ov_results/`. The write-up is in `docs/hardware_openvino_report.md`.
 
 ## Architecture
@@ -108,4 +108,4 @@ Labels 0–14 are the same in both. From 15 on they differ: IDOR and access cont
 - **Python env:** `~/work/.venv`. It has XPU PyTorch (`pip install torch --index-url https://download.pytorch.org/whl/xpu`), `requirements.txt` and OpenVINO. Do **not** install into `~/idcenv`; that is the Jupyter environment. `ov_export.py` needs `transformers<4.56`, so run it from a separate venv.
 - **Two GPUs:** PyTorch sees `xpu:0` and `xpu:1`, and `pick_device()` uses `xpu:0`. OpenVINO names them `GPU.0` and `GPU.1`. `--ov-device GPU` uses only the first one; pass `GPU.1` to target the second card.
 - **Model weights and datasets** are not on this machine after a clone. Copy `reviewer/models/`, `reviewer/dataset/` and `reviewer/test_code/` over from the original machine, for example by JupyterLab upload or a private Hugging Face repo. Never push them to GitHub. Until then, only `--no-model` works.
-- **LLM stage alternative:** besides `ov_llm_explain.py` (OpenVINO GenAI), a larger model can be served with vLLM across both cards (for example Qwen3-14B with tensor parallel 2) and called through its OpenAI-compatible API. This is not implemented yet.
+- **LLM stage on vLLM:** a vLLM server (Qwen3-14B across both cards, `max_model_len` 5120) is normally running in tmux session `vllm` on `localhost:8000`. `scripts/ov/llm_demo/vllm_explain.py` calls it (`--base-url`, `--model`, `--api-key`; Qwen3 thinking off unless `--thinking`). It shares the prompt/PLAYBOOK/diff code with `ov_llm_explain.py` through `llm_prompt.py` and writes the same output JSON. Results: `docs/ov_results/llm_outputs_vllm_b70.json` vs `llm_outputs_igpu.json`.
